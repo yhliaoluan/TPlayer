@@ -1,0 +1,13 @@
+LIBRARY TPlayer
+
+EXPORTS
+
+FF_Init
+FF_InitFile
+FF_CloseHandle
+FF_SeekTime
+FF_ReadNextFrame
+FF_SetCallback
+FF_Run
+FF_Pause
+FF_Stop
