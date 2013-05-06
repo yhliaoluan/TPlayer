@@ -23,37 +23,20 @@ enum FFCmd
 	FFCmd_Seek,
 };
 
-#ifndef BOOL
-#define BOOL int
-#endif
-
-#ifndef TRUE
-#define TRUE 1
-#endif
-
-#ifndef FALSE
-#define FALSE 0
-#endif
-
-#ifndef OUT
-#define OUT 
-#endif
-
-#ifndef IN
-#define IN 
-#endif
-
-#ifndef NULL
-#define NULL 0
-#endif
-
 typedef struct _st_FFPacketList
 {
 	void *pPkt;
 	enum FFPktOpe ope;
-	int count;
 	struct _st_FFPacketList *next;
 } FFPacketList;
+
+typedef struct _st_FFPacketQueue
+{
+	TFF_Mutex mutex;
+	TFF_Cond cond;
+	size_t count;
+	FFPacketList *first, *last;
+} FFPacketQueue;
 
 typedef struct _st_FFSeekPosPkt
 {

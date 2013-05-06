@@ -5,7 +5,7 @@
 
 TFFmpegPacketer::TFFmpegPacketer(FFContext *p)
 	:_hThread(NULL),
-	_pPktList(NULL),
+	_pQ(NULL),
 	_cmd(PkterCmd_None),
 	_isFinished(FALSE)
 {
@@ -15,26 +15,24 @@ TFFmpegPacketer::TFFmpegPacketer(FFContext *p)
 TFFmpegPacketer::~TFFmpegPacketer()
 {
 	_cmd |= PkterCmd_Exit;
-	TFF_SetEvent(_hGetPktEvent);
 	TFF_SetEvent(_hEOFEvent);
 	if(_hThread)
 	{
 		TFF_WaitThread(_hThread, 1000);
 		CloseThreadP(&_hThread);
 	}
-	FreePktList();
-	CloseMutexP(&_hPktListMutex);
-	CloseEventP(&_hGetPktEvent);
+	DestroyPktQueue();
 	CloseEventP(&_hEOFEvent);
-	CloseEventP(&_hSeekEvent);
 }
 
 int TFFmpegPacketer::Init()
 {
-	_hPktListMutex = TFF_CreateMutex();
-	_hGetPktEvent = TFF_CreateEvent();
-	_hEOFEvent = TFF_CreateEvent();
-	_hSeekEvent = TFF_CreateEvent();
+	_hEOFEvent = TFF_CreateEvent(FALSE, FALSE);
+	_pQ = (FFPacketQueue *)malloc(sizeof(FFPacketQueue));
+	memset(_pQ, 0, sizeof(FFPacketQueue));
+	_pQ->mutex = TFF_CreateMutex();
+	_pQ->cond = TFF_CreateCond();
+	_pQ->first = _pQ->last = NULL;
 	return 0;
 }
 
@@ -47,23 +45,25 @@ int TFFmpegPacketer::Start()
 
 int TFFmpegPacketer::SeekPos(int64_t pos)
 {
-	_pos = pos;
-	_cmd |= PkterCmd_Seek;
-	TFF_SetEvent(_hGetPktEvent);
+	TFF_GetMutex(_pQ->mutex, INFINITE);
+	ClearPktQueue();
+	av_seek_frame(_pCtx->pFmtCtx,
+		_pCtx->videoStreamIdx,
+		pos,
+		AVSEEK_FLAG_BACKWARD);
+	TFF_CondBroadcast(_pQ->cond);
 	TFF_SetEvent(_hEOFEvent);
-	TFF_WaitEvent(_hSeekEvent, TFF_INFINITE);
-	DebugOutput("TFFmpegPacketer::SeekPos exit");
+	TFF_ReleaseMutex(_pQ->mutex);
 	return 0;
 }
 
 int TFFmpegPacketer::GetPacketCount()
 {
-	TFF_GetMutex(_hPktListMutex, TFF_INFINITE);
+	TFF_GetMutex(_pQ->mutex, TFF_INFINITE);
 	int count = 0;
-	if(_pPktList != NULL)
-		count = _pPktList->count;
-	TFF_ReleaseMutex(_hPktListMutex);
-
+	if(_pQ != NULL)
+		count = _pQ->count;
+	TFF_ReleaseMutex(_pQ->mutex);
 	return count;
 }
 
@@ -82,53 +82,40 @@ BOOL TFFmpegPacketer::IsFinished()
 void __stdcall TFFmpegPacketer::ThreadStart()
 {
 	DebugOutput("TFFmpegPacketer::Thread begin.");
+	int readRet = 0;
 	while(true)
 	{
 		if(_cmd & PkterCmd_Exit)
 			break;
 
-		if(_cmd & PkterCmd_Seek)
-		{
-			DebugOutput("TFFmpegPacketer::Thread Begin seek position.");
-			FreePktList();
-			av_seek_frame(_pCtx->pFmtCtx,
-				_pCtx->videoStreamIdx,
-				_pos,
-				AVSEEK_FLAG_BACKWARD);
-			FFSeekPosPkt *pSeekPkt = (FFSeekPosPkt *)av_mallocz(sizeof(FFSeekPosPkt));
-			pSeekPkt->pos = _pos;
-			PutIntoPktList(PktOpe_Flush, pSeekPkt);
-			_cmd &= ~PkterCmd_Seek;
-			TFF_SetEvent(_hSeekEvent);
-			continue;
-		}
-
-		if(GetPacketCount() >= FF_MAX_PACKET_COUNT)
-		{
-			//DebugOutput("TFFmpegPacketer::Thread Packet list full. Will wait.");
-			TFF_WaitEvent(_hGetPktEvent, TFF_INFINITE);
-			continue;
-		}
+		TFF_GetMutex(_pQ->mutex, INFINITE);
+		//if the list is full
+		//thread will wait
+		while(_pQ->count >= FF_MAX_PACKET_COUNT)
+			TFF_WaitCond(_pQ->cond, _pQ->mutex);
 
 		AVPacket *pPkt = (AVPacket *)av_mallocz(sizeof(AVPacket));
 		av_init_packet(pPkt);
 		//DebugOutput("TFFmpegPacketer::Thread Before av_read_frame\n");
-		if(av_read_frame(_pCtx->pFmtCtx, pPkt) >= 0)
+		readRet = av_read_frame(_pCtx->pFmtCtx, pPkt);
+		if(readRet >= 0)
 		{
 			if(pPkt->stream_index != _pCtx->videoStreamIdx)
 			{
 				//DebugOutput("TFFmpegPacketer::Thread drop packet.\n");
+				TFF_ReleaseMutex(_pQ->mutex);
 				av_free_packet(pPkt);
 				av_free(pPkt);
 			}
 			else
 			{
-				//DebugOutput("TFFmpegPacketer::Thread add packet to packet list.\n");
-				PutIntoPktList(PktOpe_None, pPkt);
+				PutIntoPktQueue(PktOpe_None, pPkt);
+				TFF_ReleaseMutex(_pQ->mutex);
 			}
 		}
-		else
+		else/* if(readRet == AVERROR_EOF)*/
 		{
+			TFF_ReleaseMutex(_pQ->mutex);
 			av_free(pPkt);
 			DebugOutput("TFFmpegPacketer::Thread to end of file.\n");
 			_isFinished = TRUE;
@@ -143,74 +130,75 @@ void __stdcall TFFmpegPacketer::ThreadStart()
 int TFFmpegPacketer::GetFirstPktOpe(enum FFPktOpe * pOpe)
 {
 	int ret = 0;
-	TFF_GetMutex(_hPktListMutex, TFF_INFINITE);
-	if(_pPktList == NULL)
+	TFF_GetMutex(_pQ->mutex, TFF_INFINITE);
+	if(_pQ->count == 0)
+	{
 		ret = -1;
+		*pOpe = PktOpe_None;
+	}
 	else
-		*pOpe = _pPktList->ope;
-	TFF_ReleaseMutex(_hPktListMutex);
+		*pOpe = _pQ->first->ope;
+	TFF_ReleaseMutex(_pQ->mutex);
 	return ret;
 }
 
 int TFFmpegPacketer::GetPacket(FFPacketList **ppPktList)
 {
 	int ret = 0;
-	TFF_GetMutex(_hPktListMutex, TFF_INFINITE);
+	TFF_GetMutex(_pQ->mutex, TFF_INFINITE);
 
-	if(_pPktList == NULL)
+	if(_pQ->count == 0)
 	{
 		*ppPktList = NULL;
 		ret = -1;
 	}
 	else
 	{
-		*ppPktList = _pPktList;
-		_pPktList = _pPktList->next;
-		if((*ppPktList)->count > 1)
-			_pPktList->count = (*ppPktList)->count - 1;
+		*ppPktList = _pQ->first;
+		_pQ->first = _pQ->first->next;
+		_pQ->count--;
 	}
-
-	TFF_ReleaseMutex(_hPktListMutex);
+	TFF_ReleaseMutex(_pQ->mutex);
 
 	//Notify the thread the list is not full.
 	if(ret >= 0)
-		TFF_SetEvent(_hGetPktEvent);
+		TFF_CondBroadcast(_pQ->cond);
 	return ret;
 }
 
-int TFFmpegPacketer::PutIntoPktList(
+int TFFmpegPacketer::PutIntoPktQueue(
 		enum FFPktOpe opeType,
-		void *pPkt,
-		int lockMutex)
+		void *pPkt)
 {
-	if(lockMutex)
-		TFF_GetMutex(_hPktListMutex, TFF_INFINITE);
-
 	FFPacketList *pNew = (FFPacketList *)av_mallocz(sizeof(FFPacketList));
 	pNew->ope = opeType;
 	pNew->pPkt = pPkt;
 
-	FFPacketList *pList = _pPktList;
-	if(pList == NULL)
-		_pPktList = pNew;
+	if(_pQ->count == 0)
+		_pQ->first = _pQ->last = pNew;
 	else
 	{
-		while(pList->next != NULL)
-			pList = pList->next;
-		pList->next = pNew;
+		_pQ->last->next = pNew;
+		_pQ->last = pNew;
 	}
 
-	_pPktList->count++;
-	if(lockMutex)
-		TFF_ReleaseMutex(_hPktListMutex);
-
+	_pQ->count++;
 	return 0;
 }
 
-int TFFmpegPacketer::FreePktList()
+int TFFmpegPacketer::DestroyPktQueue()
 {
-	TFF_GetMutex(_hPktListMutex, TFF_INFINITE);
-	FFPacketList *pCur = _pPktList;
+	ClearPktQueue();
+	TFF_DestroyCond(&_pQ->cond);
+	TFF_CloseMutex(_pQ->mutex);
+	free(_pQ);
+	_pQ = NULL;
+	return 0;
+}
+
+int TFFmpegPacketer::ClearPktQueue()
+{
+	FFPacketList *pCur = _pQ->first;
 	FFPacketList *pNext = NULL;
 	while(pCur != NULL)
 	{
@@ -218,8 +206,8 @@ int TFFmpegPacketer::FreePktList()
 		FreeSinglePktList(&pCur);
 		pCur = pNext;
 	}
-	_pPktList = NULL;
-	TFF_ReleaseMutex(_hPktListMutex);
+	_pQ->first = _pQ->last = NULL;
+	_pQ->count = 0;
 	return 0;
 }
 
