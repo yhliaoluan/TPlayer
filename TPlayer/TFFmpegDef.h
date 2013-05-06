@@ -48,9 +48,16 @@ typedef struct _st_FFFrameList
 	AVFrame *pFrame;
 	uint8_t *buffer;
 	enum FFFrameOpe ope;
-	int count;
 	struct _st_FFFrameList *next;
 } FFFrameList;
+
+typedef struct
+{
+	TFF_Mutex mutex;
+	TFF_Cond cond;
+	size_t count;
+	FFFrameList *first, *last;
+} FFFrameQueue;
 
 typedef struct _st_FFSettings
 {

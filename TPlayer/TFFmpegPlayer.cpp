@@ -140,7 +140,7 @@ int TFFmpegPlayer::Stop()
 int TFFmpegPlayer::Init(const WCHAR *fileName)
 {
 	int ret = InitCtx(fileName);
-	_hWaitCmdEvent = TFF_CreateEvent();
+	_hWaitCmdEvent = TFF_CreateEvent(FALSE, FALSE);
 	if(ret >= 0)
 	{
 		_pPkter = new TFFmpegPacketer(_pCtx);

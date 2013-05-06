@@ -19,12 +19,14 @@ public:
 private:
 	TFF_Event _hEOFEvent;
 	TFF_Thread _hThread;
+	TFF_Mutex _avReadMutex;
 	FFPacketQueue *_pQ;
 	FFContext *_pCtx;
 	BOOL _isFinished;
 
 #define	PkterCmd_None  0x0000
 #define	PkterCmd_Exit  0x0001
+#define PkterCmd_Abandon 0x0002
 	int _cmd;
 
 	//put 

@@ -6,7 +6,7 @@
 
 class TFFmpegDecoder
 {
-	public:
+public:
 	TFFmpegDecoder(FFContext *, TFFmpegPacketer *pPkter);
 	virtual ~TFFmpegDecoder();
 	int Start();
@@ -20,31 +20,30 @@ class TFFmpegDecoder
 	int SeekPos(int64_t pos);
 	BOOL IsFinished();
 private:
-	TFF_Mutex _hFrameListMutex;
-	TFF_Event _hGetFrameEvent;
 	TFF_Event _hEOFEvent;
 	TFF_Thread _hThread;
-	TFF_Event _hSyncEvent;
-	FFFrameList *_pFrameList;
+	TFF_Mutex _mutex;
+	FFFrameQueue *_pQ;
 	FFContext *_pCtx;
 	TFFmpegPacketer *_pPkter;
 	BOOL _isFinished;
 
 #define	DecoderCmd_None  0x0000
 #define	DecoderCmd_Exit  0x0001
+#define DecoderCmd_Abandon 0x0002
 	int _cmd;
 
 	//put 
 	int PutIntoFrameList(
 		AVFrame *pFrameRGB,
 		uint8_t *pBuffer,
-		enum FFFrameOpe,
-		int lockMutex = 1);
+		enum FFFrameOpe);
 	int PutIntoFrameList(AVPacket *pPkt, int64_t pdts);
-	int Flush(FFPacketList *pPktList);
+	int Flush(int64_t pos, BOOL seekToPos = FALSE);
 
 	void __stdcall ThreadStart();
-	int FreeFrameList();
+	int ClearFrameQueue();
+	int DestroyFrameQueue();
 	int AllocRGBFrame(
 		OUT AVFrame **ppFrameRGB,
 		OUT uint8_t **ppBuffer);

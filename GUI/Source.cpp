@@ -1,57 +1,38 @@
-#include "..\TPlayer\TFFmpeg.h"
-#include "SDL.h"
 #include <Windows.h>
 
-#undef main
-
-static SDL_Surface *_screen;
-
-void ShowBMP(char *file, SDL_Surface *screen, int x, int y)
+typedef struct
 {
-    SDL_Surface *image;
-    SDL_Rect dest;
+	HANDLE event;
+} FF_Cond;
 
-    /* 将BMP文件加载到一个surface*/
-    image = SDL_LoadBMP(file);
-    if ( image == NULL ) {
-        fprintf(stderr, "无法加载 %s: %s\n", file, SDL_GetError());
-        return;
-    }
-
-    /* Blit到屏幕surface。onto the screen surface.
-       这时不能锁住surface。
-     */
-    dest.x = x;
-    dest.y = y;
-    dest.w = image->w;
-    dest.h = image->h;
-    SDL_BlitSurface(image, NULL, screen, &dest);
-
-    /* 刷新屏幕的变化部分 */
-    SDL_UpdateRects(screen, 1, &dest);
+int FF_CondInit(FF_Cond **cv)
+{
+	*cv = (FF_Cond *)malloc(sizeof(FF_Cond));
+	(*cv)->event = CreateEvent(NULL, FALSE, FALSE, NULL);
+	return 0;
 }
 
-static unsigned long __stdcall ThreadStart(void *)
+int FF_CondDestroy(FF_Cond **cv)
 {
-	_screen = SDL_SetVideoMode(640,480,0,0);
-	if(!_screen)
-		return -1;
+	CloseHandle((*cv)->event);
+	free(*cv);
+	*cv = NULL;
+	return 0;
+}
 
-	ShowBMP("D:\\Picture\\test.bmp", _screen, 0, 0);
+int FF_CondWait(FF_Cond *cv, HANDLE mutex)
+{
+	SignalObjectAndWait(mutex, cv->event, INFINITE, FALSE);
+	WaitForSingleObject(mutex, INFINITE);
+}
+
+int FF_CondSignal(FF_Cond *cv)
+{
+	SetEvent(cv->event);
 	return 0;
 }
 
 int main()
 {
-	int err = SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_TIMER);
-	if(err < 0)
-		return err;
-
-	HANDLE thread = CreateThread(NULL, 0, ThreadStart, NULL, 0, NULL);
-	CloseHandle(thread);
-	getchar();
-
-	SDL_FreeSurface(_screen);
-err_end:
 	return 0;
 }
