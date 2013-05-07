@@ -6,7 +6,9 @@ TFFmpegPlayer::TFFmpegPlayer() :
 	_pCtx(NULL),
 	_pPkter(NULL),
 	_cmd(Player_Cmd_None),
-	_hThread(NULL)
+	_hThread(NULL),
+	_cmdMutex(NULL),
+	_cmdCond(NULL)
 {
 }
 
@@ -18,7 +20,7 @@ TFFmpegPlayer::~TFFmpegPlayer()
 void TFFmpegPlayer::Uninit()
 {
 	_cmd |= Player_Cmd_Exit;
-	TFF_SetEvent(_hWaitCmdEvent);
+	TFF_CondBroadcast(_cmdCond);
 	if(_hThread)
 	{
 		TFF_WaitThread(_hThread, 1000);
@@ -34,7 +36,8 @@ void TFFmpegPlayer::Uninit()
 		delete _pPkter;
 		_pPkter = NULL;
 	}
-	CloseEventP(&_hWaitCmdEvent);
+	TFF_DestroyCond(&_cmdCond);
+	CloseMutexP(&_cmdMutex);
 	FreeCtx();
 }
 
@@ -49,12 +52,35 @@ void TFFmpegPlayer::ThreadStart()
 {
 	DebugOutput("TFFmpegPlayer::Thread thread start.");
 	int ret = 0;
+	BOOL holdMutex = FALSE;
 	while(true)
 	{
+		if(holdMutex)
+			holdMutex = FALSE;
+		else
+			TFF_GetMutex(_cmdMutex, TFF_INFINITE);
+
 		if(_cmd & Player_Cmd_Exit)
+		{
+			DebugOutput("TFFmpegPlayer::Thread Player_Cmd_Exit");
+			TFF_ReleaseMutex(_cmdMutex);
 			break;
+		}
+		else if(_cmd & Player_Cmd_Stop)
+		{
+			DebugOutput("TFFmpegPlayer::Thread Player_Cmd_Stop");
+			_cmd &= ~Player_Cmd_Stop;
+			_cmd &= ~Player_Cmd_Run;
+		}
+		else if(_cmd & Player_Cmd_Pause)
+		{
+			DebugOutput("TFFmpegPlayer::Thread Player_Cmd_Pause");
+			_cmd &= ~Player_Cmd_Pause;
+			_cmd &= ~Player_Cmd_Run;
+		}
 		else if(_cmd & Player_Cmd_Seek)
 		{
+			DebugOutput("TFFmpegPlayer::Thread Player_Cmd_Seek");
 			_cmd &= ~Player_Cmd_Seek;
 			_pDecoder->SeekPos(_seekPos);
 			if(PopOneFrame() < 0)
@@ -64,6 +90,7 @@ void TFFmpegPlayer::ThreadStart()
 		}
 		else if(_cmd & Player_Cmd_Step)
 		{
+			DebugOutput("TFFmpegPlayer::Thread Player_Cmd_Step");
 			_cmd &= ~Player_Cmd_Step;
 			PopOneFrame();
 		}
@@ -76,13 +103,16 @@ void TFFmpegPlayer::ThreadStart()
 			}
 			else if(ret == FF_EOF)
 			{
+				DebugOutput("TFFmpegPlayer::Thread end of file. ");
 				OnFinished();
-				DebugOutput("TFFmpegPlayer::Thread sleep. ");
-				TFF_WaitEvent(_hWaitCmdEvent, TFF_INFINITE);
-				DebugOutput("TFFmpegPlayer::Thread awake. ");
+				TFF_WaitCond(_cmdCond, _cmdMutex);
+				holdMutex = TRUE;
+				DebugOutput("TFFmpegPlayer::Thread awake from cv. ");
 			}
-			continue;
 		}
+
+		if(!holdMutex)
+			TFF_ReleaseMutex(_cmdMutex);
 	}
 	DebugOutput("TFFmpegPlayer::Thread thread exit.");
 }
@@ -113,34 +143,11 @@ int TFFmpegPlayer::Start()
 	return 0;
 }
 
-int TFFmpegPlayer::Step()
-{
-	CmdAndSignal(Player_Cmd_Step);
-	return 0;
-}
-
-int TFFmpegPlayer::Run()
-{
-	CmdAndSignal(Player_Cmd_Run);
-	return 0;
-}
-
-int TFFmpegPlayer::Pause()
-{
-	_cmd &= ~Player_Cmd_Run;
-	return 0;
-}
-
-int TFFmpegPlayer::Stop()
-{
-	_cmd &= ~Player_Cmd_Run;
-	return 0;
-}
-
 int TFFmpegPlayer::Init(const WCHAR *fileName)
 {
 	int ret = InitCtx(fileName);
-	_hWaitCmdEvent = TFF_CreateEvent(FALSE, FALSE);
+	_cmdMutex = TFF_CreateMutex();
+	_cmdCond = TFF_CreateCond();
 	if(ret >= 0)
 	{
 		_pPkter = new TFFmpegPacketer(_pCtx);
@@ -242,25 +249,51 @@ int TFFmpegPlayer::InitCtx(const WCHAR *fileName)
 	return ret;
 }
 
+inline void 
+TFFmpegPlayer::CmdAndSignal(int cmd)
+{
+	TFF_GetMutex(_cmdMutex, TFF_INFINITE);
+	_cmd |= cmd;
+	TFF_CondBroadcast(_cmdCond);
+	TFF_ReleaseMutex(_cmdMutex);
+}
+
+int TFFmpegPlayer::GetCurFrame()
+{
+	CmdAndSignal(Player_Cmd_Get);
+	return 0;
+}
+
+int TFFmpegPlayer::Step()
+{
+	CmdAndSignal(Player_Cmd_Step);
+	return 0;
+}
+
+int TFFmpegPlayer::Run()
+{
+	CmdAndSignal(Player_Cmd_Run);
+	return 0;
+}
+
+int TFFmpegPlayer::Pause()
+{
+	CmdAndSignal(Player_Cmd_Pause);
+	return 0;
+}
+
+int TFFmpegPlayer::Stop()
+{
+	CmdAndSignal(Player_Cmd_Stop);
+	return 0;
+}
+
 int TFFmpegPlayer::Seek(double time)
 {
 	_seekPos = (int64_t)(time * AV_TIME_BASE);
 	AVRational timeBaseQ = {1, AV_TIME_BASE};
 	_seekPos = av_rescale_q(_seekPos, timeBaseQ, _pCtx->pVideoStream->time_base);
 	CmdAndSignal(Player_Cmd_Seek);
-	return 0;
-}
-
-inline void 
-TFFmpegPlayer::CmdAndSignal(int cmd)
-{
-	_cmd |= cmd;
-	TFF_SetEvent(_hWaitCmdEvent);
-}
-
-int TFFmpegPlayer::GetCurFrame()
-{
-	CmdAndSignal(Player_Cmd_Get);
 	return 0;
 }
 
@@ -312,7 +345,6 @@ void TFFmpegPlayer::OnNewFrame(FFFrame *p)
 
 void TFFmpegPlayer::OnFinished(void)
 {
-	_cmd = Player_Cmd_None;
 	if(_fFinishedCB)
 		_fFinishedCB();
 }

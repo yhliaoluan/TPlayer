@@ -7,7 +7,9 @@ TFFmpegPacketer::TFFmpegPacketer(FFContext *p)
 	:_hThread(NULL),
 	_pQ(NULL),
 	_cmd(PkterCmd_None),
-	_isFinished(FALSE)
+	_isFinished(FALSE),
+	_hEOFEvent(NULL),
+	_avReadMutex(NULL)
 {
 	_pCtx = p;
 }
@@ -16,6 +18,7 @@ TFFmpegPacketer::~TFFmpegPacketer()
 {
 	_cmd |= PkterCmd_Exit;
 	TFF_SetEvent(_hEOFEvent);
+	TFF_CondBroadcast(_pQ->cond);
 	if(_hThread)
 	{
 		TFF_WaitThread(_hThread, 1000);
@@ -113,23 +116,31 @@ void __stdcall TFFmpegPacketer::ThreadStart()
 			}
 			else
 			{
+				//DebugOutput("TFFmpegPacketer::Thread will get mutex.\n");
 				TFF_GetMutex(_pQ->mutex, TFF_INFINITE);
 
 				//if the list is full
 				//and there is no abandon command
 				//thread will wait
 				while(_pQ->count >= FF_MAX_PACKET_COUNT &&
-					(_cmd & PkterCmd_Abandon) == 0)
+					(_cmd & PkterCmd_Abandon) == 0 &&
+					(_cmd & PkterCmd_Exit) == 0)
 					TFF_WaitCond(_pQ->cond, _pQ->mutex);
 
-				if(_cmd & PkterCmd_Abandon)
+				if((_cmd & PkterCmd_Abandon) || 
+					(_cmd & PkterCmd_Exit))
 				{
+					DebugOutput("TFFmpegPacketer::Thread abandon package.\n");
 					av_free_packet(pPkt);
 					av_free(pPkt);
 				}
 				else
+				{
+					//DebugOutput("TFFmpegPacketer::Thread put into queue. num:%d\n", _pQ->count);
 					PutIntoPktQueue(PktOpe_None, pPkt);
+				}
 				TFF_ReleaseMutex(_pQ->mutex);
+				//DebugOutput("TFFmpegPacketer::Thread release mutex.\n");
 			}
 		}
 		else/* if(readRet == AVERROR_EOF)*/

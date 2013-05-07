@@ -87,6 +87,8 @@
     <ClCompile Include="TFFmpegDecoder.cpp" />
     <ClCompile Include="TFFmpegPacketer.cpp" />
     <ClCompile Include="TFFmpegPlayer.cpp" />
+    <ClCompile Include="TFFmpegUtil.cpp" />
+    <ClCompile Include="TFFmpegWin32.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="TFFmpeg.def" />

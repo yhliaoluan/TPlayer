@@ -27,7 +27,8 @@ private:
 	TFF_Thread _hThread;
 	NewFrameCB _fNewFrameCB;
 	FinishedCB _fFinishedCB;
-	TFF_Event _hWaitCmdEvent;
+	TFF_Mutex _cmdMutex;
+	TFF_Cond _cmdCond;
 
 #define Player_Cmd_None 0x0000
 #define Player_Cmd_Run  0x0001

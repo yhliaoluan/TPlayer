@@ -5,13 +5,8 @@
 
 #define FF_DEBUG_OUTPUT
 
-static void inline
-DebugOutput(const char *msg)
-{
-#ifdef FF_DEBUG_OUTPUT
-	TFF_OutputDebugString(msg);
-#endif
-}
+void
+DebugOutput(const char *msg, ...);
 
 static inline void
 CloseThreadP(TFF_Thread *thread)

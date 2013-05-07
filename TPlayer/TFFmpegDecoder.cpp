@@ -4,9 +4,12 @@
 #define FF_MAX_CACHED_FRAME_COUNT 3
 
 TFFmpegDecoder::TFFmpegDecoder(FFContext *p, TFFmpegPacketer *pPkter)
-	: _hThread(NULL)
-	, _cmd(DecoderCmd_None),
-	_isFinished(FALSE)
+	: _cmd(DecoderCmd_None),
+	_isFinished(FALSE),
+	_hEOFEvent(NULL),
+	_pQ(NULL),
+	_mutex(NULL),
+	_hThread(NULL)
 {
 	_pCtx = p;
 	_pPkter = pPkter;
@@ -15,6 +18,7 @@ TFFmpegDecoder::~TFFmpegDecoder()
 {
 	_cmd |= DecoderCmd_Exit;
 	TFF_SetEvent(_hEOFEvent);
+	TFF_CondBroadcast(_pQ->cond);
 	if(_hThread)
 	{
 		TFF_WaitThread(_hThread, 1000);
@@ -162,10 +166,14 @@ void __stdcall TFFmpegDecoder::ThreadStart()
 				TFF_GetMutex(_pQ->mutex, TFF_INFINITE);
 
 				while(_pQ->count >= FF_MAX_CACHED_FRAME_COUNT &&
-					(_cmd & DecoderCmd_Abandon) == 0)
+					(_cmd & DecoderCmd_Abandon) == 0 &&
+					(_cmd & DecoderCmd_Exit) == 0)
 					TFF_WaitCond(_pQ->cond, _pQ->mutex);
-				if((_cmd & DecoderCmd_Abandon) == 0)
+
+				if((_cmd & DecoderCmd_Abandon) == 0 &&
+					(_cmd & DecoderCmd_Exit) == 0)
 					PutIntoFrameList(pkt, pdts);
+				TFF_ReleaseMutex(_pQ->mutex);
 			}
 			else
 				pdts = pkt->dts;
