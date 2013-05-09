@@ -23,6 +23,7 @@ private:
 	TFF_Event _hEOFEvent;
 	TFF_Thread _hThread;
 	TFF_Mutex _mutex;
+	AVFrame *_decodedFrame;
 	FFFrameQueue *_pQ;
 	FFContext *_pCtx;
 	TFFmpegPacketer *_pPkter;

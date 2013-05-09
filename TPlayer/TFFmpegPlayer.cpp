@@ -53,6 +53,9 @@ void TFFmpegPlayer::ThreadStart()
 	DebugOutput("TFFmpegPlayer::Thread thread start.");
 	int ret = 0;
 	BOOL holdMutex = FALSE;
+	FFFrame frame;
+	frame.size = _pCtx->pVideoStream->codec->width * _pCtx->pVideoStream->codec->height * 3;
+	frame.buff = (unsigned char *)malloc(sizeof(unsigned char) * frame.size);
 	while(true)
 	{
 		if(holdMutex)
@@ -83,25 +86,22 @@ void TFFmpegPlayer::ThreadStart()
 			DebugOutput("TFFmpegPlayer::Thread Player_Cmd_Seek");
 			_cmd &= ~Player_Cmd_Seek;
 			_pDecoder->SeekPos(_seekPos);
-			if(PopOneFrame() < 0)
-			{
+			if(PopOneFrame(&frame) < 0)
 				DebugOutput("TFFmpegPlayer::Thread seek completed but cannot get a frame.");
-			}
+			else
+				OnNewFrame(&frame);
 		}
 		else if(_cmd & Player_Cmd_Step)
 		{
 			DebugOutput("TFFmpegPlayer::Thread Player_Cmd_Step");
 			_cmd &= ~Player_Cmd_Step;
-			PopOneFrame();
+			if(PopOneFrame(&frame) >= 0)
+				OnNewFrame(&frame);
 		}
 		else if(_cmd & Player_Cmd_Run)
 		{
-			if((ret = PopOneFrame()) < 0)
-			{
-				DebugOutput("FFmpeg player cannot pop a frame. Will try in 10 ms.");
-				TFF_Sleep(10);
-			}
-			else if(ret == FF_EOF)
+			ret = PopOneFrame(&frame);
+			if(ret == FF_EOF)
 			{
 				DebugOutput("TFFmpegPlayer::Thread end of file. ");
 				OnFinished();
@@ -109,11 +109,14 @@ void TFFmpegPlayer::ThreadStart()
 				holdMutex = TRUE;
 				DebugOutput("TFFmpegPlayer::Thread awake from cv. ");
 			}
+			else
+				OnNewFrame(&frame);
 		}
 
 		if(!holdMutex)
 			TFF_ReleaseMutex(_cmdMutex);
 	}
+	free(frame.buff);
 	DebugOutput("TFFmpegPlayer::Thread thread exit.");
 }
 
@@ -167,6 +170,7 @@ int TFFmpegPlayer::Init(const WCHAR *fileName)
 int TFFmpegPlayer::InitCtx(const WCHAR *fileName)
 {
 	int ret = 0;
+	char szFile[1024] = {0};
 	FreeCtx();
 	_pCtx = (FFContext *)av_mallocz(sizeof(FFContext));
 	_pCtx->videoStreamIdx = -1;
@@ -176,13 +180,13 @@ int TFFmpegPlayer::InitCtx(const WCHAR *fileName)
 		0,
 		fileName,
 		-1,
-		_pCtx->fileName,
-		MAX_PATH,
+		szFile,
+		1024,
 		NULL,
 		NULL);
 
 	ret = avformat_open_input(&_pCtx->pFmtCtx,
-		_pCtx->fileName, NULL, NULL);
+		szFile, NULL, NULL);
 
 	if(ret < 0)
 	{
@@ -232,8 +236,6 @@ int TFFmpegPlayer::InitCtx(const WCHAR *fileName)
 		return ret;
 	}
 
-	_pCtx->pDecodedFrame = avcodec_alloc_frame();
-
 	_pCtx->pSwsCtx = sws_getContext(
 		pvs->codec->width,
 		pvs->codec->height,
@@ -243,9 +245,9 @@ int TFFmpegPlayer::InitCtx(const WCHAR *fileName)
         PIX_FMT_BGR24,
         SWS_BICUBIC, NULL, NULL, NULL);
 
-	_pCtx->pCurFrame = (FFFrame *)av_mallocz(sizeof(FFFrame));
-	_pCtx->pCurFrame->size = pvs->codec->width * pvs->codec->height * 3;
-	_pCtx->pCurFrame->buff = (uint8_t *)av_mallocz(sizeof(uint8_t) * _pCtx->pCurFrame->size);
+	//_pCtx->pCurFrame = (FFFrame *)av_mallocz(sizeof(FFFrame));
+	//_pCtx->pCurFrame->size = pvs->codec->width * pvs->codec->height * 3;
+	//_pCtx->pCurFrame->buff = (uint8_t *)av_mallocz(sizeof(uint8_t) * _pCtx->pCurFrame->size);
 	return ret;
 }
 
@@ -297,35 +299,30 @@ int TFFmpegPlayer::Seek(double time)
 	return 0;
 }
 
-int TFFmpegPlayer::GetOneFrame(void)
+int TFFmpegPlayer::GetOneFrame(FFFrame *frame)
 {
 	int ret = 0;
 	FFFrameList *pFrameList = NULL;
 	if((ret = _pDecoder->Get(&pFrameList)) < 0)
 		return ret;
 
-	_pCtx->pCurFrame->buff = pFrameList->pFrame->data[0];
-	_pCtx->pCurFrame->dts = pFrameList->pFrame->pkt_dts;
-	_pCtx->pCurFrame->time = _pCtx->pCurFrame->dts * av_q2d(_pCtx->pVideoStream->time_base);
-	OnNewFrame(_pCtx->pCurFrame);
+	memcpy(frame->buff, pFrameList->pFrame->data[0], frame->size);
+	frame->dts = pFrameList->pFrame->pkt_dts;
+	frame->time = frame->dts * av_q2d(_pCtx->pVideoStream->time_base);
 	return 0;
 }
 
-int TFFmpegPlayer::PopOneFrame()
+int TFFmpegPlayer::PopOneFrame(FFFrame *frame)
 {
 	int ret = 0;
 	FFFrameList *pFrameList = NULL;
 	if((ret = _pDecoder->Pop(&pFrameList)) < 0)
 	{
-		if(_pDecoder->IsFinished())
-			return FF_EOF;
-		return ret;
+		return FF_EOF;
 	}
-
-	_pCtx->pCurFrame->buff = pFrameList->pFrame->data[0];
-	_pCtx->pCurFrame->dts = pFrameList->pFrame->pkt_dts;
-	_pCtx->pCurFrame->time = _pCtx->pCurFrame->dts * av_q2d(_pCtx->pVideoStream->time_base);
-	OnNewFrame(_pCtx->pCurFrame);
+	memcpy(frame->buff, pFrameList->pFrame->data[0], frame->size);
+	frame->dts = pFrameList->pFrame->pkt_dts;
+	frame->time = frame->dts * av_q2d(_pCtx->pVideoStream->time_base);
 	_pDecoder->FreeSingleFrameList(&pFrameList);
 	return 0;
 }
@@ -353,10 +350,6 @@ void TFFmpegPlayer::FreeCtx(void)
 {
 	if(_pCtx)
 	{
-		if(_pCtx->pCurFrame)
-			av_freep(&_pCtx->pCurFrame);
-		if(_pCtx->pDecodedFrame)
-			avcodec_free_frame(&_pCtx->pDecodedFrame);
 		if(_pCtx->pSwsCtx)
 			sws_freeContext(_pCtx->pSwsCtx);
 		if(_pCtx->pVideoStream)

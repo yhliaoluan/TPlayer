@@ -45,8 +45,8 @@ private:
 	static unsigned long __stdcall SThreadStart(void *);
 	void ThreadStart(void);
 	int InitCtx(const wchar_t *fileName);
-	int PopOneFrame(void);
-	int GetOneFrame(void);
+	int PopOneFrame(FFFrame *);
+	int GetOneFrame(FFFrame *);
 	void OnNewFrame(FFFrame *);
 	void OnFinished(void);
 	void FreeCtx(void);

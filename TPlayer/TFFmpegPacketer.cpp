@@ -3,6 +3,9 @@
 
 #define FF_MAX_PACKET_COUNT 10
 
+//1MB
+#define FF_MAX_PACKET_SIZE 1048576
+
 TFFmpegPacketer::TFFmpegPacketer(FFContext *p)
 	:_hThread(NULL),
 	_pQ(NULL),
@@ -39,7 +42,6 @@ int TFFmpegPacketer::Init()
 	memset(_pQ, 0, sizeof(FFPacketQueue));
 	_pQ->mutex = TFF_CreateMutex();
 	_pQ->cond = TFF_CreateCond();
-	_pQ->first = _pQ->last = NULL;
 
 	//create av read mutex
 	_avReadMutex = TFF_CreateMutex();
@@ -122,9 +124,9 @@ void __stdcall TFFmpegPacketer::ThreadStart()
 				//if the list is full
 				//and there is no abandon command
 				//thread will wait
-				while(_pQ->count >= FF_MAX_PACKET_COUNT &&
-					(_cmd & PkterCmd_Abandon) == 0 &&
-					(_cmd & PkterCmd_Exit) == 0)
+				while(_pQ->size >= FF_MAX_PACKET_SIZE &&
+					!(_cmd & PkterCmd_Abandon) &&
+					!(_cmd & PkterCmd_Exit))
 					TFF_WaitCond(_pQ->cond, _pQ->mutex);
 
 				if((_cmd & PkterCmd_Abandon) || 
@@ -136,8 +138,9 @@ void __stdcall TFFmpegPacketer::ThreadStart()
 				}
 				else
 				{
-					//DebugOutput("TFFmpegPacketer::Thread put into queue. num:%d\n", _pQ->count);
 					PutIntoPktQueue(PktOpe_None, pPkt);
+					TFF_CondBroadcast(_pQ->cond);
+					//DebugOutput("TFFmpegPacketer::Thread after put into queue. count:%d size:%d", _pQ->count, _pQ->size);
 				}
 				TFF_ReleaseMutex(_pQ->mutex);
 				//DebugOutput("TFFmpegPacketer::Thread release mutex.\n");
@@ -148,6 +151,7 @@ void __stdcall TFFmpegPacketer::ThreadStart()
 			av_free(pPkt);
 			DebugOutput("TFFmpegPacketer::Thread to end of file.\n");
 			_isFinished = TRUE;
+			TFF_CondBroadcast(_pQ->cond);
 			TFF_WaitEvent(_hEOFEvent, TFF_INFINITE);
 			_isFinished = FALSE;
 			DebugOutput("TFFmpegPacketer::Thread awake from hPktThreadWaitEvent.\n");
@@ -176,22 +180,29 @@ int TFFmpegPacketer::GetPacket(FFPacketList **ppPktList)
 	int ret = 0;
 	TFF_GetMutex(_pQ->mutex, TFF_INFINITE);
 
-	if(_pQ->count == 0)
+	while(_pQ->count == 0 && 
+		!_isFinished)
+		TFF_WaitCond(_pQ->cond, _pQ->mutex);
+
+	if(_isFinished)
 	{
 		*ppPktList = NULL;
 		ret = -1;
 	}
 	else
 	{
-		*ppPktList = _pQ->first;
+		FFPacketList *first = _pQ->first;
 		_pQ->first = _pQ->first->next;
 		_pQ->count--;
+		if(first->ope == PktOpe_None)
+			_pQ->size -= ((AVPacket *)first->pPkt)->size;
+		*ppPktList = first;
+
+		//Notify that list is not full.
+		TFF_CondBroadcast(_pQ->cond);
 	}
 	TFF_ReleaseMutex(_pQ->mutex);
-
 	//Notify the thread the list is not full.
-	if(ret >= 0)
-		TFF_CondBroadcast(_pQ->cond);
 	return ret;
 }
 
@@ -212,6 +223,8 @@ int TFFmpegPacketer::PutIntoPktQueue(
 	}
 
 	_pQ->count++;
+	if(opeType == PktOpe_None)
+		_pQ->size += ((AVPacket *)pPkt)->size;
 	return 0;
 }
 
@@ -237,6 +250,7 @@ int TFFmpegPacketer::ClearPktQueue()
 	}
 	_pQ->first = _pQ->last = NULL;
 	_pQ->count = 0;
+	_pQ->size = 0;
 	return 0;
 }
 

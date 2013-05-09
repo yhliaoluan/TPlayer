@@ -24,6 +24,7 @@ TFFmpegDecoder::~TFFmpegDecoder()
 		TFF_WaitThread(_hThread, 1000);
 		CloseThreadP(&_hThread);
 	}
+	avcodec_free_frame(&_decodedFrame);
 	DestroyFrameQueue();
 	CloseEventP(&_hEOFEvent);
 	CloseMutexP(&_mutex);
@@ -40,6 +41,8 @@ int TFFmpegDecoder::Init()
 	_pQ->first = _pQ->last = NULL;
 
 	_mutex = TFF_CreateMutex();
+
+	_decodedFrame = avcodec_alloc_frame();
 	return 0;
 }
 
@@ -85,8 +88,11 @@ int TFFmpegDecoder::PutIntoFrameList(AVPacket *pPkt, int64_t pdts)
 	uint8_t *buffer = NULL;
 	AllocRGBFrame(&pFrameRGB, &buffer);
 	sws_scale(_pCtx->pSwsCtx,
-		_pCtx->pDecodedFrame->data, _pCtx->pDecodedFrame->linesize, 0,
-		_pCtx->pDecodedFrame->height, pFrameRGB->data,
+		_decodedFrame->data,
+		_decodedFrame->linesize,
+		0,
+		_decodedFrame->height,
+		pFrameRGB->data,
 		pFrameRGB->linesize);
 
 	if(pPkt->dts == AV_NOPTS_VALUE)
@@ -121,7 +127,7 @@ int TFFmpegDecoder::Flush(int64_t pos, BOOL seekToPos)
 		int gotPic = 0;
 		int64_t tmpPtds = -1;
 		avcodec_decode_video2(_pCtx->pVideoStream->codec,
-			_pCtx->pDecodedFrame, &gotPic, pTmpPkt);
+			_decodedFrame, &gotPic, pTmpPkt);
 		if(!gotPic)
 			tmpPtds = pTmpPkt->dts;
 		if(pTmpPkt->dts >= pos
@@ -159,7 +165,7 @@ void __stdcall TFFmpegDecoder::ThreadStart()
 			int gotPic = 0;
 			AVPacket *pkt = (AVPacket *)pPktList->pPkt;
 			avcodec_decode_video2(_pCtx->pVideoStream->codec,
-				_pCtx->pDecodedFrame, &gotPic, pkt);
+				_decodedFrame, &gotPic, pkt);
 			TFF_ReleaseMutex(_mutex);
 			if(gotPic)
 			{
@@ -172,7 +178,10 @@ void __stdcall TFFmpegDecoder::ThreadStart()
 
 				if((_cmd & DecoderCmd_Abandon) == 0 &&
 					(_cmd & DecoderCmd_Exit) == 0)
+				{
 					PutIntoFrameList(pkt, pdts);
+					TFF_CondBroadcast(_pQ->cond);
+				}
 				TFF_ReleaseMutex(_pQ->mutex);
 			}
 			else
@@ -182,18 +191,11 @@ void __stdcall TFFmpegDecoder::ThreadStart()
 		else
 		{
 			TFF_ReleaseMutex(_mutex);
-			if(_pPkter->IsFinished())
-			{
-				_isFinished = TRUE;
-				DebugOutput("TFFmpegDecoder::Thread Finished. Will wait for awake.");
-				TFF_WaitEvent(_hEOFEvent, TFF_INFINITE);
-				_isFinished = FALSE;
-			}
-			else
-			{
-				DebugOutput("TFFmpegDecoder::Thread Cannot get a packet. Will try in 10 ms.");
-				TFF_Sleep(10);
-			}
+			_isFinished = TRUE;
+			TFF_CondBroadcast(_pQ->cond);
+			DebugOutput("TFFmpegDecoder::Thread Finished. Will wait for awake.");
+			TFF_WaitEvent(_hEOFEvent, TFF_INFINITE);
+			_isFinished = FALSE;
 		}
 	}
 	DebugOutput("TFFmpegDecoder::Thread exit.");
@@ -212,7 +214,11 @@ int TFFmpegDecoder::Pop(FFFrameList **pFrameList)
 	int ret = 0;
 	TFF_GetMutex(_pQ->mutex, TFF_INFINITE);
 
-	if(_pQ->count == 0)
+	while(_pQ->count == 0 &&
+		!_isFinished)
+		TFF_WaitCond(_pQ->cond, _pQ->mutex);
+
+	if(_isFinished)
 	{
 		*pFrameList = NULL;
 		ret = -1;
@@ -222,12 +228,10 @@ int TFFmpegDecoder::Pop(FFFrameList **pFrameList)
 		*pFrameList = _pQ->first;
 		_pQ->first = _pQ->first->next;
 		_pQ->count--;
+		TFF_CondBroadcast(_pQ->cond);
 	}
 
 	TFF_ReleaseMutex(_pQ->mutex);
-
-	if(ret >= 0)
-		TFF_CondBroadcast(_pQ->cond);
 	return ret;
 }
 

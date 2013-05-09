@@ -35,6 +35,7 @@ typedef struct _st_FFPacketQueue
 	TFF_Mutex mutex;
 	TFF_Cond cond;
 	size_t count;
+	size_t size;
 	FFPacketList *first, *last;
 } FFPacketQueue;
 
@@ -90,13 +91,10 @@ typedef void (__stdcall *FinishedCB)(void);
 
 typedef struct _st_FFContext
 {
-	char fileName[260];
 	AVFormatContext *pFmtCtx;
 	AVStream *pVideoStream;
 	SwsContext *pSwsCtx;
-	FFFrame *pCurFrame;//Store the current rgb24 frame. Will be used in callback func.
 	int videoStreamIdx;
-	AVFrame *pDecodedFrame;
 } FFContext;
 
 #define FF_EOF								2
