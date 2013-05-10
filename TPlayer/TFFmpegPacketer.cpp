@@ -60,11 +60,14 @@ int TFFmpegPacketer::SeekPos(int64_t pos)
 	TFF_GetMutex(_avReadMutex, TFF_INFINITE);
 	TFF_GetMutex(_pQ->mutex, TFF_INFINITE);
 	ClearPktQueue();
-	av_seek_frame(_pCtx->pFmtCtx,
+	int err = av_seek_frame(_pCtx->pFmtCtx,
 		_pCtx->videoStreamIdx,
 		pos,
 		AVSEEK_FLAG_BACKWARD);
+	if(err < 0)
+		DebugOutput("TFFmpegPacketer::SeekPos ret %d", err);
 	_cmd |= PkterCmd_Abandon;
+	_isFinished = FALSE;
 	TFF_CondBroadcast(_pQ->cond);
 	TFF_SetEvent(_hEOFEvent);
 	TFF_ReleaseMutex(_pQ->mutex);
@@ -153,7 +156,6 @@ void __stdcall TFFmpegPacketer::ThreadStart()
 			_isFinished = TRUE;
 			TFF_CondBroadcast(_pQ->cond);
 			TFF_WaitEvent(_hEOFEvent, TFF_INFINITE);
-			_isFinished = FALSE;
 			DebugOutput("TFFmpegPacketer::Thread awake from hPktThreadWaitEvent.\n");
 		}
 	}

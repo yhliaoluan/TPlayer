@@ -19,6 +19,7 @@ public:
 	int FreeSingleFrameList(FFFrameList **);
 	int SeekPos(int64_t pos);
 	BOOL IsFinished();
+	int SetResolution(int width, int height);
 private:
 	TFF_Event _hEOFEvent;
 	TFF_Thread _hThread;
@@ -28,6 +29,7 @@ private:
 	FFContext *_pCtx;
 	TFFmpegPacketer *_pPkter;
 	BOOL _isFinished;
+	SwsContext *_swsCtx;
 
 #define	DecoderCmd_None  0x0000
 #define	DecoderCmd_Exit  0x0001
@@ -35,19 +37,14 @@ private:
 	int _cmd;
 
 	//put 
-	int PutIntoFrameList(
-		AVFrame *pFrameRGB,
-		uint8_t *pBuffer,
-		enum FFFrameOpe);
+	int PutIntoFrameList(FFFrameList *);
 	int PutIntoFrameList(AVPacket *pPkt, int64_t pdts);
 	int Flush(int64_t pos, BOOL seekToPos = FALSE);
 
 	void __stdcall ThreadStart();
 	int ClearFrameQueue();
 	int DestroyFrameQueue();
-	int AllocRGBFrame(
-		OUT AVFrame **ppFrameRGB,
-		OUT uint8_t **ppBuffer);
+	int AllocDstFrame(OUT FFFrameList **);
 	static unsigned long __stdcall SThreadStart(void *);
 };
 #endif

@@ -49,6 +49,9 @@ typedef struct _st_FFFrameList
 	AVFrame *pFrame;
 	uint8_t *buffer;
 	enum FFFrameOpe ope;
+	int width;
+	int height;
+	int size;
 	struct _st_FFFrameList *next;
 } FFFrameList;
 
@@ -73,6 +76,15 @@ typedef struct _st_FFSettings
 	char codecName[128];
 } FFSettings;
 
+#define FF_FRAME_PIXFORMAT_RGB24 0
+#define FF_FRAME_PIXFORMAT_YUV420 1
+
+typedef struct _st_FFInitSetting
+{
+	wchar_t fileName[260];
+	int dstFramePixFmt;
+} FFInitSetting;
+
 typedef struct _st_FFFrame
 {
 	unsigned char *buff;
@@ -84,6 +96,8 @@ typedef struct _st_FFFrame
 	int oriSize;
 	int size;
 	double time;
+	int width;
+	int height;
 } FFFrame;
 
 typedef void (__stdcall *NewFrameCB)(FFFrame *p);
@@ -93,17 +107,21 @@ typedef struct _st_FFContext
 {
 	AVFormatContext *pFmtCtx;
 	AVStream *pVideoStream;
-	SwsContext *pSwsCtx;
 	int videoStreamIdx;
+	enum AVPixelFormat dstPixFmt;
+	int dstWidth;
+	int dstHeight;
 } FFContext;
 
 #define FF_EOF								2
+#define FF_OK								0
 
 //co ffmpeg errors
 #define FF_ERR_GENERAL						-100
-#define FF_ERR_CANNOT_OPEN_FILE				-101
-#define FF_ERR_CANNOT_FIND_STREAM_INFO		-102
-#define FF_ERR_NO_VIDEO_STREAM				-103
-#define FF_ERR_CANNOT_OPEN_CODEC			-104
+#define FF_ERR_CANNOT_OPEN_FILE				(FF_ERR_GENERAL - 1)
+#define FF_ERR_CANNOT_FIND_STREAM_INFO		(FF_ERR_GENERAL - 2)
+#define FF_ERR_NO_VIDEO_STREAM				(FF_ERR_GENERAL - 3)
+#define FF_ERR_CANNOT_OPEN_CODEC			(FF_ERR_GENERAL - 4)
+#define FF_ERR_NOPOINTER					(FF_ERR_GENERAL - 5)
 
 #endif

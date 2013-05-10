@@ -2,6 +2,7 @@
 #define _T_FFMPEG_UTIL_H_
 
 #include "TFFmpegPlatform.h"
+#include "TFFmpegDef.h"
 
 #define FF_DEBUG_OUTPUT
 
@@ -35,6 +36,18 @@ CloseEventP(TFF_Event *event)
 	{
 		TFF_CloseEvent(*event);
 		*event = NULL;
+	}
+}
+
+inline enum AVPixelFormat
+FF_GetAVPixFmt(int ffFmt)
+{
+	switch(ffFmt)
+	{
+	case FF_FRAME_PIXFORMAT_YUV420:
+		return PIX_FMT_YUV420P;
+	default:
+		return PIX_FMT_BGR24;
 	}
 }
 

@@ -9,7 +9,8 @@ TFFmpegDecoder::TFFmpegDecoder(FFContext *p, TFFmpegPacketer *pPkter)
 	_hEOFEvent(NULL),
 	_pQ(NULL),
 	_mutex(NULL),
-	_hThread(NULL)
+	_hThread(NULL),
+	_swsCtx(NULL)
 {
 	_pCtx = p;
 	_pPkter = pPkter;
@@ -28,6 +29,11 @@ TFFmpegDecoder::~TFFmpegDecoder()
 	DestroyFrameQueue();
 	CloseEventP(&_hEOFEvent);
 	CloseMutexP(&_mutex);
+	if(_swsCtx)
+	{
+		sws_freeContext(_swsCtx);
+		_swsCtx = NULL;
+	}
 }
 
 int TFFmpegDecoder::Init()
@@ -43,6 +49,34 @@ int TFFmpegDecoder::Init()
 	_mutex = TFF_CreateMutex();
 
 	_decodedFrame = avcodec_alloc_frame();
+
+	_swsCtx = sws_getCachedContext(
+		NULL,
+		_pCtx->pVideoStream->codec->width,
+		_pCtx->pVideoStream->codec->height,
+        _pCtx->pVideoStream->codec->pix_fmt,
+        _pCtx->dstWidth,
+		_pCtx->dstHeight,
+		_pCtx->dstPixFmt,
+        SWS_FAST_BILINEAR, NULL, NULL, NULL);
+	return 0;
+}
+
+int TFFmpegDecoder::SetResolution(int width, int height)
+{
+	TFF_GetMutex(_pQ->mutex, TFF_INFINITE);
+	_pCtx->dstWidth = width;
+	_pCtx->dstHeight = height;
+	_swsCtx = sws_getCachedContext(
+		_swsCtx,
+		_pCtx->pVideoStream->codec->width,
+		_pCtx->pVideoStream->codec->height,
+        _pCtx->pVideoStream->codec->pix_fmt,
+        _pCtx->dstWidth,
+		_pCtx->dstHeight,
+		_pCtx->dstPixFmt,
+        SWS_FAST_BILINEAR, NULL, NULL, NULL);
+	TFF_ReleaseMutex(_pQ->mutex);
 	return 0;
 }
 
@@ -75,6 +109,7 @@ int TFFmpegDecoder::SeekPos(int64_t pos)
 	_pPkter->SeekPos(pos);
 	Flush(pos);
 	_cmd |= DecoderCmd_Abandon;
+	_isFinished = FALSE;
 	TFF_CondBroadcast(_pQ->cond);
 	TFF_SetEvent(_hEOFEvent);
 	TFF_ReleaseMutex(_pQ->mutex);
@@ -84,23 +119,23 @@ int TFFmpegDecoder::SeekPos(int64_t pos)
 
 int TFFmpegDecoder::PutIntoFrameList(AVPacket *pPkt, int64_t pdts)
 {
-	AVFrame *pFrameRGB = NULL;
-	uint8_t *buffer = NULL;
-	AllocRGBFrame(&pFrameRGB, &buffer);
-	sws_scale(_pCtx->pSwsCtx,
+	FFFrameList *pFrame = NULL;
+	AllocDstFrame(&pFrame);
+	pFrame->ope = FrameOpe_None;
+	sws_scale(_swsCtx,
 		_decodedFrame->data,
 		_decodedFrame->linesize,
 		0,
 		_decodedFrame->height,
-		pFrameRGB->data,
-		pFrameRGB->linesize);
+		pFrame->pFrame->data,
+		pFrame->pFrame->linesize);
 
 	if(pPkt->dts == AV_NOPTS_VALUE)
-		pFrameRGB->pkt_dts = pdts;
+		pFrame->pFrame->pkt_dts = pdts;
 	else
-		pFrameRGB->pkt_dts = pPkt->dts;
+		pFrame->pFrame->pkt_dts = pPkt->dts;
 
-	return PutIntoFrameList(pFrameRGB, buffer, FrameOpe_None);
+	return PutIntoFrameList(pFrame);
 }
 
 int TFFmpegDecoder::Flush(int64_t pos, BOOL seekToPos)
@@ -172,12 +207,12 @@ void __stdcall TFFmpegDecoder::ThreadStart()
 				TFF_GetMutex(_pQ->mutex, TFF_INFINITE);
 
 				while(_pQ->count >= FF_MAX_CACHED_FRAME_COUNT &&
-					(_cmd & DecoderCmd_Abandon) == 0 &&
-					(_cmd & DecoderCmd_Exit) == 0)
+					!(_cmd & DecoderCmd_Abandon) &&
+					!(_cmd & DecoderCmd_Exit))
 					TFF_WaitCond(_pQ->cond, _pQ->mutex);
 
-				if((_cmd & DecoderCmd_Abandon) == 0 &&
-					(_cmd & DecoderCmd_Exit) == 0)
+				if(!(_cmd & DecoderCmd_Abandon) &&
+					!(_cmd & DecoderCmd_Exit))
 				{
 					PutIntoFrameList(pkt, pdts);
 					TFF_CondBroadcast(_pQ->cond);
@@ -195,7 +230,6 @@ void __stdcall TFFmpegDecoder::ThreadStart()
 			TFF_CondBroadcast(_pQ->cond);
 			DebugOutput("TFFmpegDecoder::Thread Finished. Will wait for awake.");
 			TFF_WaitEvent(_hEOFEvent, TFF_INFINITE);
-			_isFinished = FALSE;
 		}
 	}
 	DebugOutput("TFFmpegDecoder::Thread exit.");
@@ -211,7 +245,7 @@ int TFFmpegDecoder::Get(FFFrameList **pFrameList)
 
 int TFFmpegDecoder::Pop(FFFrameList **pFrameList)
 {
-	int ret = 0;
+	int ret = FF_OK;
 	TFF_GetMutex(_pQ->mutex, TFF_INFINITE);
 
 	while(_pQ->count == 0 &&
@@ -235,16 +269,8 @@ int TFFmpegDecoder::Pop(FFFrameList **pFrameList)
 	return ret;
 }
 
-int TFFmpegDecoder::PutIntoFrameList(
-		AVFrame *pFrameRGB,
-		uint8_t *pBuffer,
-		enum FFFrameOpe ope)
+int TFFmpegDecoder::PutIntoFrameList(FFFrameList *pNew)
 {
-	FFFrameList *pNew = (FFFrameList *)av_mallocz(sizeof(FFFrameList));
-	pNew->pFrame = pFrameRGB;
-	pNew->buffer = pBuffer;
-	pNew->ope = ope;
-
 	if(_pQ->count == 0)
 		_pQ->first = _pQ->last = pNew;
 	else
@@ -254,7 +280,7 @@ int TFFmpegDecoder::PutIntoFrameList(
 	}
 
 	_pQ->count++;
-	return 0;
+	return FF_OK;
 }
 
 int TFFmpegDecoder::DestroyFrameQueue()
@@ -264,7 +290,7 @@ int TFFmpegDecoder::DestroyFrameQueue()
 	TFF_DestroyCond(&_pQ->cond);
 	free(_pQ);
 	_pQ = NULL;
-	return 0;
+	return FF_OK;
 }
 
 int TFFmpegDecoder::ClearFrameQueue()
@@ -279,36 +305,41 @@ int TFFmpegDecoder::ClearFrameQueue()
 	}
 	_pQ->first = _pQ->last = NULL;
 	_pQ->count = 0;
-	return 0;
+	return FF_OK;
 }
 
 int TFFmpegDecoder::FreeSingleFrameList(FFFrameList **ppFrameList)
 {
 	FFFrameList *pFrameList = *ppFrameList;
+	if(!pFrameList)
+		return FF_ERR_NOPOINTER;
 	if(pFrameList->pFrame)
 		avcodec_free_frame(&pFrameList->pFrame);
 	if(pFrameList->buffer)
 		av_free(pFrameList->buffer);
 	av_free(pFrameList);
 	*ppFrameList = NULL;
-	return 0;
+	return FF_OK;
 }
 
-int TFFmpegDecoder::AllocRGBFrame(
-	OUT AVFrame **ppFrameRGB,
-	OUT uint8_t **ppBuffer)
+int TFFmpegDecoder::AllocDstFrame(OUT FFFrameList **ppDstFrame)
 {
-	AVFrame *pFrameRGB = avcodec_alloc_frame();
-	int numBytes=avpicture_get_size(PIX_FMT_RGB24,
-		_pCtx->pVideoStream->codec->width,  
-        _pCtx->pVideoStream->codec->height);
-	uint8_t *buffer = (uint8_t *)av_malloc(numBytes*sizeof(uint8_t));
-	avpicture_fill((AVPicture *)pFrameRGB,
-		buffer,
-		PIX_FMT_RGB24,  
-		_pCtx->pVideoStream->codec->width,
-		_pCtx->pVideoStream->codec->height);
-	*ppFrameRGB = pFrameRGB;
-	*ppBuffer = buffer;
+	FFFrameList *pFrame = (FFFrameList *)av_malloc(sizeof(FFFrameList));
+	pFrame->next = NULL;
+	pFrame->pFrame = avcodec_alloc_frame();
+	int numBytes=avpicture_get_size(_pCtx->dstPixFmt,
+		_pCtx->dstWidth,
+		_pCtx->dstHeight);
+	pFrame->buffer = (uint8_t *)av_malloc(numBytes*sizeof(uint8_t));
+	avpicture_fill((AVPicture *)pFrame->pFrame,
+		pFrame->buffer,
+		_pCtx->dstPixFmt,
+		_pCtx->dstWidth,
+		_pCtx->dstHeight);
+	pFrame->width = _pCtx->dstWidth;
+	pFrame->height = _pCtx->dstHeight;
+	pFrame->size = numBytes;
+
+	*ppDstFrame = pFrame;
 	return 0;
 }

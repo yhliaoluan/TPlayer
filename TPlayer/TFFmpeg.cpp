@@ -17,13 +17,15 @@ int __stdcall FF_Uninit()
 	return 0;
 }
 
-int __stdcall FF_InitFile(const wchar_t *fileName,
+int __stdcall FF_InitFile(const FFInitSetting *pInitSetting,
 						  OUT FFSettings *pSettings,
 						  OUT void **ppHandle)
 {
 	int ret = 0;
-	TFFmpegPlayer *player = new TFFmpegPlayer();
-	ret = player->Init(fileName);
+	TFFmpegPlayer *player = NULL;
+
+	player = new TFFmpegPlayer();
+	ret = player->Init(pInitSetting);
 	if(ret < 0)
 		goto err_end;
 
@@ -94,5 +96,53 @@ int __stdcall FF_CloseHandle(void *p)
 	if(player)
 		delete player;
 
+	return 0;
+}
+
+int __stdcall FF_ScalePrepared(int srcW,
+							   int srcH,
+							   int dstW,
+							   int dstH,
+							   OUT void **ppCtx)
+{
+	SwsContext *context = sws_getCachedContext(NULL,
+		srcW,
+		srcH,
+		PIX_FMT_BGR24,
+		dstW,
+		dstH,
+		PIX_FMT_BGR24,
+		SWS_POINT, NULL, NULL, NULL);
+
+	if(!context)
+		return -1;
+
+	*ppCtx = context;
+	return 0;
+}
+
+int __stdcall FF_Scale(void *pCtx,
+					   unsigned char *buff,
+					   int srcStride,
+					   int srcH,
+					   unsigned char *outBuff,
+					   int dstStride)
+{
+	SwsContext *context = (SwsContext *)pCtx;
+	int h = sws_scale(context,
+		&buff,
+		&srcStride,
+		0,
+		srcH,
+		&outBuff,
+		&dstStride);
+	return h;
+}
+
+int __stdcall FF_SetResolution(void *p, int width, int height)
+{
+	TFFmpegPlayer *player = (TFFmpegPlayer *)p;
+	if(player)
+		player->SetResolution(width, height);
 	return 0;
 }

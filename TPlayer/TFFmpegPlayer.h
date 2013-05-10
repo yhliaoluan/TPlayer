@@ -11,7 +11,7 @@ public:
 	TFFmpegPlayer();
 	virtual ~TFFmpegPlayer();
 	int SetCB(NewFrameCB, FinishedCB);
-	int Init(const wchar_t *fileName);
+	int Init(const FFInitSetting *pSetting);
 	int Start();
 	int Run();
 	int Pause();
@@ -20,6 +20,7 @@ public:
 	int Seek(double);
 	int GetVideoInfo(FFSettings *);
 	int GetCurFrame();
+	int SetResolution(int w, int h);
 private:
 	FFContext *_pCtx;
 	TFFmpegDecoder *_pDecoder;
@@ -44,10 +45,10 @@ private:
 
 	static unsigned long __stdcall SThreadStart(void *);
 	void ThreadStart(void);
-	int InitCtx(const wchar_t *fileName);
-	int PopOneFrame(FFFrame *);
-	int GetOneFrame(FFFrame *);
-	void OnNewFrame(FFFrame *);
+	int InitCtx(const FFInitSetting *pSetting);
+	int PopOneFrame(OUT FFFrame *, FFFrameList **);
+	int GetOneFrame(OUT FFFrame *);
+	void OnNewFrame(IN FFFrame *);
 	void OnFinished(void);
 	void FreeCtx(void);
 	void Uninit(void);

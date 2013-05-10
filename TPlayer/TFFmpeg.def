@@ -11,3 +11,6 @@ FF_SetCallback
 FF_Run
 FF_Pause
 FF_Stop
+FF_ScalePrepared
+FF_Scale
+FF_SetResolution
