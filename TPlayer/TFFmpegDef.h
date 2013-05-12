@@ -78,6 +78,7 @@ typedef struct _st_FFSettings
 
 #define FF_FRAME_PIXFORMAT_RGB24 0
 #define FF_FRAME_PIXFORMAT_YUV420 1
+#define FF_FRAME_PIXFORMAT_RGB32 2
 
 typedef struct _st_FFInitSetting
 {

@@ -16,16 +16,17 @@
         private void InitializeComponent()
         {
             this.panelControl = new System.Windows.Forms.Panel();
-            this.btnScale = new System.Windows.Forms.Button();
+            this.btnRun = new System.Windows.Forms.Button();
             this.btnOpenFile = new System.Windows.Forms.Button();
-            this.panelVideo = new System.Windows.Forms.Panel();
+            this.panelVideo = new System.Windows.Forms.PictureBox();
             this.panelControl.SuspendLayout();
+            ((System.ComponentModel.ISupportInitialize)(this.panelVideo)).BeginInit();
             this.SuspendLayout();
             // 
             // panelControl
             // 
             this.panelControl.BackColor = System.Drawing.Color.Silver;
-            this.panelControl.Controls.Add(this.btnScale);
+            this.panelControl.Controls.Add(this.btnRun);
             this.panelControl.Controls.Add(this.btnOpenFile);
             this.panelControl.Dock = System.Windows.Forms.DockStyle.Bottom;
             this.panelControl.Location = new System.Drawing.Point(0, 397);
@@ -33,15 +34,15 @@
             this.panelControl.Size = new System.Drawing.Size(734, 100);
             this.panelControl.TabIndex = 0;
             // 
-            // btnScale
+            // btnRun
             // 
-            this.btnScale.Location = new System.Drawing.Point(13, 37);
-            this.btnScale.Name = "btnScale";
-            this.btnScale.Size = new System.Drawing.Size(75, 23);
-            this.btnScale.TabIndex = 1;
-            this.btnScale.Text = "Scale";
-            this.btnScale.UseVisualStyleBackColor = true;
-            this.btnScale.Click += new System.EventHandler(this.btnScale_Click);
+            this.btnRun.Location = new System.Drawing.Point(13, 37);
+            this.btnRun.Name = "btnRun";
+            this.btnRun.Size = new System.Drawing.Size(75, 23);
+            this.btnRun.TabIndex = 1;
+            this.btnRun.Text = "Run";
+            this.btnRun.UseVisualStyleBackColor = true;
+            this.btnRun.Click += new System.EventHandler(this.btnRun_Click);
             // 
             // btnOpenFile
             // 
@@ -55,12 +56,14 @@
             // 
             // panelVideo
             // 
-            this.panelVideo.BackColor = System.Drawing.Color.Black;
+            this.panelVideo.BackColor = System.Drawing.Color.Silver;
             this.panelVideo.Dock = System.Windows.Forms.DockStyle.Fill;
             this.panelVideo.Location = new System.Drawing.Point(0, 0);
             this.panelVideo.Name = "panelVideo";
             this.panelVideo.Size = new System.Drawing.Size(734, 397);
             this.panelVideo.TabIndex = 1;
+            this.panelVideo.TabStop = false;
+            this.panelVideo.Resize += new System.EventHandler(this.panelVideo_Resize);
             // 
             // Form1
             // 
@@ -69,10 +72,10 @@
             this.ClientSize = new System.Drawing.Size(734, 497);
             this.Controls.Add(this.panelVideo);
             this.Controls.Add(this.panelControl);
-            this.MaximizeBox = false;
             this.Name = "Form1";
             this.Text = "Form1";
             this.panelControl.ResumeLayout(false);
+            ((System.ComponentModel.ISupportInitialize)(this.panelVideo)).EndInit();
             this.ResumeLayout(false);
 
         }
@@ -80,9 +83,9 @@
         #endregion
 
         private System.Windows.Forms.Panel panelControl;
-        private System.Windows.Forms.Panel panelVideo;
         private System.Windows.Forms.Button btnOpenFile;
-        private System.Windows.Forms.Button btnScale;
+        private System.Windows.Forms.Button btnRun;
+        private System.Windows.Forms.PictureBox panelVideo;
 
 
     }

@@ -46,7 +46,7 @@ namespace WinformPlayer
         public string fileName;
 
         [MarshalAs(UnmanagedType.I4)]
-        public int callbackFramePixFmt;
+        public int dstFramePixFmt;
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -76,6 +76,9 @@ namespace WinformPlayer
         public int size;
 
         public double time;
+
+        public int width;
+        public int height;
 
         public void Dispose()
         {
@@ -138,5 +141,8 @@ namespace WinformPlayer
 					   int srcH,
 					   IntPtr outBuff,
 					   int dstStride);
+
+        [DllImport("TPlayer.dll")]
+        public static extern int FF_SetResolution(IntPtr handle, int width, int height);
     }
 }

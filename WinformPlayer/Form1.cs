@@ -7,6 +7,7 @@ using System.Drawing;
 using System.Drawing.Imaging;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Threading;
 using System.Windows.Forms;
 
 namespace WinformPlayer
@@ -20,8 +21,12 @@ namespace WinformPlayer
         }
 
         private IntPtr _handle = IntPtr.Zero;
-        private IntPtr _ctx = IntPtr.Zero;
-        private string _fileName = string.Empty;
+        private FFSettings _settings = new FFSettings();
+        private OnNewFrame _onNewFrame = null;
+        private OnFinished _onFinished = null;
+        private Stopwatch _stopwatch = new Stopwatch();
+        private object _lock = new object();
+        private Bitmap _bmp = null;
 
         /// <summary>
         /// Clean up any resources being used.
@@ -29,9 +34,10 @@ namespace WinformPlayer
         /// <param name="disposing">true if managed resources should be disposed; otherwise, false.</param>
         protected override void Dispose(bool disposing)
         {
-            if (disposing && (components != null))
+            if (disposing)
             {
-                components.Dispose();
+                if(components != null)
+                    components.Dispose();
             }
             if (_handle != IntPtr.Zero)
                 FFAPI.FF_CloseHandle(_handle);
@@ -40,7 +46,55 @@ namespace WinformPlayer
 
         void Form1_Load(object sender, EventArgs e)
         {
+            this.panelVideo.Paint += panelVideo_Paint;
             FFAPI.FF_Init();
+            _onNewFrame = OnNewFrame;
+            _onFinished = OnFinished;
+        }
+
+        void panelVideo_Paint(object sender, PaintEventArgs e)
+        {
+            if (_bmp == null)
+                return;
+            lock (_lock)
+            {
+                e.Graphics.DrawImageUnscaled((Bitmap)_bmp,
+                    0, 0);
+            }
+        }
+
+        void OnNewFrame(IntPtr frame)
+        {
+            FFFrame f = (FFFrame)Marshal.PtrToStructure(frame, typeof(FFFrame));
+            try
+            {
+                int sleepMS = (int)(f.time * 1000 - _stopwatch.ElapsedMilliseconds);
+                if (sleepMS > 0)
+                    Thread.Sleep(sleepMS);
+
+                PixelFormat pixfmt = PixelFormat.Format32bppPArgb;
+                _bmp = new Bitmap(f.width,
+                    f.height,
+                    pixfmt);
+                BitmapData bmpData = new BitmapData();
+                bmpData.Width = f.width;
+                bmpData.Height = f.height;
+                bmpData.Stride = f.size / f.height;
+                bmpData.PixelFormat = pixfmt;
+                bmpData.Scan0 = f.buff;
+                _bmp.LockBits(new Rectangle(0, 0, _bmp.Width, _bmp.Height),
+                    ImageLockMode.WriteOnly | ImageLockMode.UserInputBuffer,
+                    pixfmt, bmpData);
+                _bmp.UnlockBits(bmpData);
+                panelVideo.Invalidate();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(ex.ToString());
+            }
+        }
+        void OnFinished()
+        {
         }
 
         private void btnOpenFile_Click(object sender, EventArgs e)
@@ -49,92 +103,51 @@ namespace WinformPlayer
             dlg.Multiselect = false;
             if (dlg.ShowDialog() == System.Windows.Forms.DialogResult.OK)
             {
-                _fileName = dlg.FileName;
-                using (Bitmap bmp = new Bitmap(_fileName))
+                FFInitSetting setting = new FFInitSetting();
+                setting.fileName = dlg.FileName;
+                setting.dstFramePixFmt = 2;
+                if (_handle != IntPtr.Zero)
                 {
-                    int err = FFAPI.FF_ScalePrepared(
-                        bmp.Width,
-                        bmp.Height,
-                        bmp.Width / 2,
-                        bmp.Height / 2,
-                        out _ctx);
-
-                    using (Graphics g = this.panelVideo.CreateGraphics())
-                    {
-                        g.DrawImageUnscaled(bmp, 0, 0);
-                    }
+                    FFAPI.FF_CloseHandle(_handle);
+                    _handle = IntPtr.Zero;
                 }
+                _stopwatch.Reset();
+                FFAPI.FF_InitFile(ref setting, out _settings, out _handle);
+                FFAPI.FF_SetCallback(_handle, _onNewFrame, _onFinished);
+                SetResolution(panelVideo.Width, panelVideo.Height);
             }
         }
 
-        private void btnScale_Click(object sender, EventArgs e)
+        private void SetResolution(int w, int h)
         {
-            using (Bitmap bmp = new Bitmap(_fileName))
+            int srcW = _settings.width;
+            int srcH = _settings.height;
+            double srcRate = (double)srcW / srcH;
+            double viewRate = (double)w / h;
+            int dstW = -1;
+            int dstH = -1;
+            if (viewRate > srcRate)
             {
-                IntPtr srcBuff = IntPtr.Zero;
-                int srcStride = -1;
-                CopyData(bmp, out srcBuff, out srcStride);
-                int dstW = bmp.Width / 2;
-                int dstStride = dstW * 3;
-                if (dstStride % 4 != 0)
-                    dstStride += (4 - dstStride % 4);
-                int dstH = bmp.Height / 2;
-
-                IntPtr outBuff = Marshal.AllocHGlobal(dstStride * dstH);
-
-                Graphics g = this.panelVideo.CreateGraphics();
-                StringBuilder sb = new StringBuilder();
-                Stopwatch stopwatch = Stopwatch.StartNew();
-                for (int i = 0; i < 3; i++)
-                {
-                    int err = FFAPI.FF_Scale(_ctx,
-                        srcBuff,
-                        srcStride,
-                        bmp.Height,
-                        outBuff,
-                        dstStride);
-                    sb.Append(stopwatch.ElapsedMilliseconds + " ");
-
-                    if (err >= 0)
-                    {
-                        using (Bitmap newBmp = new Bitmap(dstW, dstH,
-                            dstStride, PixelFormat.Format24bppRgb, outBuff))
-                        {
-                            g.DrawImageUnscaled(newBmp, 0, 0);
-                        }
-                    }
-                    sb.Append(stopwatch.ElapsedMilliseconds + "\n");
-                    stopwatch = Stopwatch.StartNew();
-                }
-
-                for (int i = 0; i < 3; i++)
-                {
-                    g.DrawImage(bmp,
-                        new Rectangle(0, 0, bmp.Width / 2, bmp.Height / 2));
-                    sb.Append(stopwatch.ElapsedMilliseconds + "\n");
-                    stopwatch = Stopwatch.StartNew();
-                }
-                MessageBox.Show(sb.ToString());
-
-                g.Dispose();
-                Marshal.FreeHGlobal(srcBuff);
-                Marshal.FreeHGlobal(outBuff);
+                dstH = h;
+                dstW = (int)Math.Round(srcRate * dstH);
             }
+            else
+            {
+                dstW = w;
+                dstH = (int)Math.Round(dstW / srcRate);
+            }
+            FFAPI.FF_SetResolution(_handle, dstW, dstH);
         }
 
-        private void CopyData(Bitmap bmp, out IntPtr data, out int stride)
+        private void btnRun_Click(object sender, EventArgs e)
         {
-            BitmapData bmpData = bmp.LockBits(new Rectangle(0, 0, bmp.Width, bmp.Height),
-                ImageLockMode.ReadOnly, PixelFormat.Format24bppRgb);
+            FFAPI.FF_Run(_handle);
+            _stopwatch.Start();
+        }
 
-            data = Marshal.AllocHGlobal(bmpData.Stride * bmpData.Height);
-
-            byte[] buff = new byte[bmpData.Stride * bmpData.Height];
-            Marshal.Copy(bmpData.Scan0, buff, 0, buff.Length);
-            Marshal.Copy(buff, 0, data, buff.Length);
-
-            stride = bmpData.Stride;
-            bmp.UnlockBits(bmpData);
+        private void panelVideo_Resize(object sender, EventArgs e)
+        {
+            SetResolution(panelVideo.Width, panelVideo.Height);
         }
     }
 }
