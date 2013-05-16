@@ -122,7 +122,7 @@ int TFFmpegDecoder::PutIntoFrameList(AVPacket *pPkt, int64_t pdts)
 	FFFrameList *pFrame = NULL;
 	AllocDstFrame(&pFrame);
 	pFrame->ope = FrameOpe_None;
-	sws_scale(_swsCtx,
+	int ret = sws_scale(_swsCtx,
 		_decodedFrame->data,
 		_decodedFrame->linesize,
 		0,

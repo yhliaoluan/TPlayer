@@ -45,11 +45,11 @@ FF_GetAVPixFmt(int ffFmt)
 	switch(ffFmt)
 	{
 	case FF_FRAME_PIXFORMAT_YUV420:
-		return PIX_FMT_YUV420P;
+		return AV_PIX_FMT_YUV420P;
 	case FF_FRAME_PIXFORMAT_RGB32:
 		return AV_PIX_FMT_BGR0;
 	default:
-		return AV_PIX_FMT_BGR0;
+		return PIX_FMT_BGR24;
 	}
 }
 

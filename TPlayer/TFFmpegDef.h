@@ -88,13 +88,11 @@ typedef struct _st_FFInitSetting
 
 typedef struct _st_FFFrame
 {
+	unsigned char **data;
+	int *linesize;
 	unsigned char *buff;
-	long long pos;
 	int keyFrame;
-	long long bets; //best effort timestamp
-	long long pts;
 	long long dts;
-	int oriSize;
 	int size;
 	double time;
 	int width;

@@ -309,19 +309,6 @@ int TFFmpegPlayer::Seek(double time)
 	return 0;
 }
 
-int TFFmpegPlayer::GetOneFrame(FFFrame *frame)
-{
-	int ret = 0;
-	FFFrameList *pFrameList = NULL;
-	if((ret = _pDecoder->Get(&pFrameList)) < 0)
-		return FF_EOF;
-
-	memcpy(frame->buff, pFrameList->pFrame->data[0], frame->size);
-	frame->dts = pFrameList->pFrame->pkt_dts;
-	frame->time = frame->dts * av_q2d(_pCtx->pVideoStream->time_base);
-	return 0;
-}
-
 int TFFmpegPlayer::PopOneFrame(FFFrame *frame, FFFrameList **ppFrame)
 {
 	int ret = 0;
@@ -331,7 +318,9 @@ int TFFmpegPlayer::PopOneFrame(FFFrame *frame, FFFrameList **ppFrame)
 		*ppFrame = NULL;
 		return FF_EOF;
 	}
+	frame->data = pFrameList->pFrame->data;
 	frame->buff = pFrameList->buffer;
+	frame->linesize = pFrameList->pFrame->linesize;
 	frame->size = pFrameList->size;
 	frame->dts = pFrameList->pFrame->pkt_dts;
 	frame->width = pFrameList->width;

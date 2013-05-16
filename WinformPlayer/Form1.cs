@@ -72,21 +72,26 @@ namespace WinformPlayer
                 if (sleepMS > 0)
                     Thread.Sleep(sleepMS);
 
-                PixelFormat pixfmt = PixelFormat.Format32bppPArgb;
-                _bmp = new Bitmap(f.width,
-                    f.height,
-                    pixfmt);
-                BitmapData bmpData = new BitmapData();
-                bmpData.Width = f.width;
-                bmpData.Height = f.height;
-                bmpData.Stride = f.size / f.height;
-                bmpData.PixelFormat = pixfmt;
-                bmpData.Scan0 = f.buff;
-                _bmp.LockBits(new Rectangle(0, 0, _bmp.Width, _bmp.Height),
-                    ImageLockMode.WriteOnly | ImageLockMode.UserInputBuffer,
-                    pixfmt, bmpData);
-                _bmp.UnlockBits(bmpData);
-                panelVideo.Invalidate();
+                //lock (_lock)
+                //{
+                //    PixelFormat pixfmt = PixelFormat.Format32bppPArgb;
+                //    if (_bmp != null)
+                //        _bmp.Dispose();
+                //    _bmp = new Bitmap(f.width,
+                //        f.height,
+                //        pixfmt);
+                //    BitmapData bmpData = new BitmapData();
+                //    bmpData.Width = f.width;
+                //    bmpData.Height = f.height;
+                //    bmpData.Stride = f.size / f.height;
+                //    bmpData.PixelFormat = pixfmt;
+                //    bmpData.Scan0 = f.buff;
+                //    _bmp.LockBits(new Rectangle(0, 0, _bmp.Width, _bmp.Height),
+                //        ImageLockMode.WriteOnly | ImageLockMode.UserInputBuffer,
+                //        pixfmt, bmpData);
+                //    _bmp.UnlockBits(bmpData);
+                //}
+                //panelVideo.Invalidate();
             }
             catch (Exception ex)
             {
@@ -105,7 +110,7 @@ namespace WinformPlayer
             {
                 FFInitSetting setting = new FFInitSetting();
                 setting.fileName = dlg.FileName;
-                setting.dstFramePixFmt = 2;
+                setting.dstFramePixFmt = 1;
                 if (_handle != IntPtr.Zero)
                 {
                     FFAPI.FF_CloseHandle(_handle);
@@ -114,7 +119,7 @@ namespace WinformPlayer
                 _stopwatch.Reset();
                 FFAPI.FF_InitFile(ref setting, out _settings, out _handle);
                 FFAPI.FF_SetCallback(_handle, _onNewFrame, _onFinished);
-                SetResolution(panelVideo.Width, panelVideo.Height);
+                //SetResolution(panelVideo.Width, panelVideo.Height);
             }
         }
 
@@ -147,6 +152,8 @@ namespace WinformPlayer
 
         private void panelVideo_Resize(object sender, EventArgs e)
         {
+            if (panelVideo.Width == 0 || panelVideo.Height == 0)
+                return;
             SetResolution(panelVideo.Width, panelVideo.Height);
         }
     }

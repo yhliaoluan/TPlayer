@@ -47,7 +47,6 @@ private:
 	void ThreadStart(void);
 	int InitCtx(const FFInitSetting *pSetting);
 	int PopOneFrame(OUT FFFrame *, FFFrameList **);
-	int GetOneFrame(OUT FFFrame *);
 	void OnNewFrame(IN FFFrame *);
 	void OnFinished(void);
 	void FreeCtx(void);
