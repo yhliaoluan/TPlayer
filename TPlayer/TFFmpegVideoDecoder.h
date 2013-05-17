@@ -1,14 +1,14 @@
-#ifndef _T_FFMPEG_DECODER_H_
-#define _T_FFMPEG_DECODER_H_
+#ifndef _T_FFMPEG_VIDEO_DECODER_H_
+#define _T_FFMPEG_VIDEO_DECODER_H_
 
 #include "TFFmpegDef.h"
 #include "TFFmpegPacketer.h"
 
-class TFFmpegDecoder
+class TFFmpegVideoDecoder
 {
 public:
-	TFFmpegDecoder(FFContext *, TFFmpegPacketer *pPkter);
-	virtual ~TFFmpegDecoder();
+	TFFmpegVideoDecoder(FFContext *, TFFmpegPacketer *pPkter);
+	virtual ~TFFmpegVideoDecoder();
 	int Start();
 	//Get and remove first frame.
 	int Pop(FFFrameList **);
@@ -24,8 +24,7 @@ private:
 	TFF_Event _hEOFEvent;
 	TFF_Thread _hThread;
 	TFF_Mutex _mutex;
-	AVFrame *_decodedFrame;
-	FFFrameQueue *_pQ;
+	FFFrameQueue *_pVQ;
 	FFContext *_pCtx;
 	TFFmpegPacketer *_pPkter;
 	BOOL _isFinished;
@@ -38,7 +37,7 @@ private:
 
 	//put 
 	int PutIntoFrameList(FFFrameList *);
-	int PutIntoFrameList(AVPacket *pPkt, int64_t pdts);
+	int PutIntoFrameList(AVFrame *pDecVFrame, int64_t pktDts, int64_t pdts);
 	int Flush(int64_t pos, BOOL seekToPos = FALSE);
 
 	void __stdcall ThreadStart();

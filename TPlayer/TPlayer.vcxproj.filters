@@ -18,9 +18,6 @@
     <ClCompile Include="TFFmpeg.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="TFFmpegDecoder.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="TFFmpegPacketer.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -33,12 +30,15 @@
     <ClCompile Include="TFFmpegUtil.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="TFFmpegVideoDecoder.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="TFFmpegAudioDecoder.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="TFFmpeg.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="TFFmpegDecoder.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="TFFmpegDef.h">
@@ -57,6 +57,12 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="TFFmpegWin32.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="TFFmpegVideoDecoder.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="TFFmpegAudioDecoder.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

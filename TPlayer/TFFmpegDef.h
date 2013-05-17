@@ -8,8 +8,6 @@ extern "C"
 #include <libswscale\swscale.h>
 }
 
-enum FFPktOpe { PktOpe_None, PktOpe_Flush };
-
 enum FFFrameOpe { FrameOpe_None };
 
 enum FFCmd
@@ -25,8 +23,7 @@ enum FFCmd
 
 typedef struct _st_FFPacketList
 {
-	void *pPkt;
-	enum FFPktOpe ope;
+	AVPacket *pPkt;
 	struct _st_FFPacketList *next;
 } FFPacketList;
 
@@ -36,6 +33,7 @@ typedef struct _st_FFPacketQueue
 	TFF_Cond cond;
 	size_t count;
 	size_t size;
+	int type;
 	FFPacketList *first, *last;
 } FFPacketQueue;
 
@@ -51,7 +49,7 @@ typedef struct _st_FFFrameList
 	enum FFFrameOpe ope;
 	int width;
 	int height;
-	int size;
+	size_t size;
 	struct _st_FFFrameList *next;
 } FFFrameList;
 
@@ -60,6 +58,7 @@ typedef struct
 	TFF_Mutex mutex;
 	TFF_Cond cond;
 	size_t count;
+	size_t size;
 	FFFrameList *first, *last;
 } FFFrameQueue;
 
@@ -105,22 +104,28 @@ typedef void (__stdcall *FinishedCB)(void);
 typedef struct _st_FFContext
 {
 	AVFormatContext *pFmtCtx;
-	AVStream *pVideoStream;
+	AVStream *videoStream;
+	AVStream *audioStream;
 	int videoStreamIdx;
+	int audioStreamIdx;
+	int handleVideo;
+	int handleAudio;
 	enum AVPixelFormat dstPixFmt;
 	int dstWidth;
 	int dstHeight;
 } FFContext;
 
-#define FF_EOF								2
 #define FF_OK								0
+#define FF_EOF								2
+#define FF_NO_AUDIO_STREAM					3
 
 //co ffmpeg errors
 #define FF_ERR_GENERAL						-100
 #define FF_ERR_CANNOT_OPEN_FILE				(FF_ERR_GENERAL - 1)
 #define FF_ERR_CANNOT_FIND_STREAM_INFO		(FF_ERR_GENERAL - 2)
 #define FF_ERR_NO_VIDEO_STREAM				(FF_ERR_GENERAL - 3)
-#define FF_ERR_CANNOT_OPEN_CODEC			(FF_ERR_GENERAL - 4)
-#define FF_ERR_NOPOINTER					(FF_ERR_GENERAL - 5)
+#define FF_ERR_CANNOT_OPEN_VIDEO_CODEC		(FF_ERR_GENERAL - 4)
+#define FF_ERR_CANNOT_OPEN_AUDIO_CODEC		(FF_ERR_GENERAL - 5)
+#define FF_ERR_NOPOINTER					(FF_ERR_GENERAL - 6)
 
 #endif

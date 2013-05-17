@@ -92,7 +92,8 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="TFFmpeg.cpp" />
-    <ClCompile Include="TFFmpegDecoder.cpp" />
+    <ClCompile Include="TFFmpegAudioDecoder.cpp" />
+    <ClCompile Include="TFFmpegVideoDecoder.cpp" />
     <ClCompile Include="TFFmpegPacketer.cpp" />
     <ClCompile Include="TFFmpegPlayer.cpp" />
     <ClCompile Include="TFFmpegUtil.cpp" />
@@ -103,7 +104,8 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="TFFmpeg.h" />
-    <ClInclude Include="TFFmpegDecoder.h" />
+    <ClInclude Include="TFFmpegAudioDecoder.h" />
+    <ClInclude Include="TFFmpegVideoDecoder.h" />
     <ClInclude Include="TFFmpegDef.h" />
     <ClInclude Include="TFFmpegPacketer.h" />
     <ClInclude Include="TFFmpegPlatform.h" />

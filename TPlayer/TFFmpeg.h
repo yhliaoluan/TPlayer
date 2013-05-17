@@ -3,7 +3,7 @@
 
 #include "TFFmpegDef.h"
 #include "TFFmpegPacketer.h"
-#include "TFFmpegDecoder.h"
+#include "TFFmpegVideoDecoder.h"
 #include "TFFmpegPlayer.h"
 
 int __stdcall FF_Init();

@@ -2,7 +2,7 @@
 #define _T_FFMPEG_PLAYER_H_
 
 #include "TFFmpegDef.h"
-#include "TFFmpegDecoder.h"
+#include "TFFmpegVideoDecoder.h"
 #include "TFFmpegPacketer.h"
 
 class TFFmpegPlayer
@@ -23,7 +23,7 @@ public:
 	int SetResolution(int w, int h);
 private:
 	FFContext *_pCtx;
-	TFFmpegDecoder *_pDecoder;
+	TFFmpegVideoDecoder *_pDecoder;
 	TFFmpegPacketer *_pPkter;
 	TFF_Thread _hThread;
 	NewFrameCB _fNewFrameCB;
@@ -51,6 +51,8 @@ private:
 	void OnFinished(void);
 	void FreeCtx(void);
 	void Uninit(void);
+	int OpenVideoCodec(void);
+	int OpenAudioCodec(void);
 	inline void CmdAndSignal(int);
 };
 #endif
