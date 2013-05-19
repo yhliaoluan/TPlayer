@@ -133,17 +133,23 @@ void TFFmpegPlayer::ThreadStart()
 int TFFmpegPlayer::GetVideoInfo(FFSettings *pSettings)
 {
 	AVStream *pVS = _pCtx->videoStream;
-	AVCodecContext *pCodecCtx = pVS->codec;
+	AVCodecContext *pVCodecCtx = pVS->codec;
 	AVRational frameRate = av_stream_get_r_frame_rate(pVS);
-	pSettings->width = pCodecCtx->width;
-	pSettings->height = pCodecCtx->height;
+	pSettings->width = pVCodecCtx->width;
+	pSettings->height = pVCodecCtx->height;
 	pSettings->fpsNum = frameRate.num;
 	pSettings->fpsDen = frameRate.den;
 	pSettings->timebaseNum = pVS->time_base.num;
 	pSettings->timebaseDen = pVS->time_base.den;
 	pSettings->totalFrames = pVS->nb_frames;
 	pSettings->duration = pVS->duration;
-	strcpy_s(pSettings->codecName, pCodecCtx->codec->long_name);
+	if(_pCtx->audioStream)
+	{
+		AVCodecContext *pACodecCtx = _pCtx->audioStream->codec;
+		pSettings->audioSampleRate = pACodecCtx->sample_rate;
+		pSettings->audioChannels = pACodecCtx->channels;
+	}
+	strcpy_s(pSettings->codecName, pVCodecCtx->codec->long_name);
 	return 0;
 }
 
@@ -262,11 +268,6 @@ int TFFmpegPlayer::InitCtx(const FFInitSetting *pSetting)
 	else
 		_pCtx->videoStream = _pCtx->pFmtCtx->streams[_pCtx->videoStreamIdx];
 
-	if(_pCtx->audioStreamIdx == -1)
-		DebugOutput("Cannot find audio stream.");
-	else
-		_pCtx->audioStream = _pCtx->pFmtCtx->streams[_pCtx->audioStreamIdx];
-
 	ret = OpenVideoCodec();
 
 	if(ret < 0)
@@ -275,6 +276,11 @@ int TFFmpegPlayer::InitCtx(const FFInitSetting *pSetting)
 		ret = FF_ERR_CANNOT_OPEN_VIDEO_CODEC;
 		return ret;
 	}
+
+	if(_pCtx->audioStreamIdx == -1)
+		DebugOutput("Cannot find audio stream.");
+	else
+		_pCtx->audioStream = _pCtx->pFmtCtx->streams[_pCtx->audioStreamIdx];
 
 	ret = OpenAudioCodec();
 	if(ret < 0)

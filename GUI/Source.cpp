@@ -15,6 +15,9 @@ using std::cout;
 using std::cin;
 using std::endl;
 
+#define CONTROL_HEIGHT 100
+#define SDL_AUDIO_BUFFER_SIZE 1024
+
 typedef struct _st_PlayContext
 {
 	SDL_Surface *window;
@@ -29,15 +32,15 @@ void __stdcall NewFrame(FFFrame *p)
 {
 	SDL_Rect rect;
 
-	if(!_context->overlay)
-		_context->overlay = SDL_CreateYUVOverlay(p->width, p->height, SDL_IYUV_OVERLAY, _context->window);
+	//if(!_context->overlay)
+	//	_context->overlay = SDL_CreateYUVOverlay(p->width, p->height, SDL_IYUV_OVERLAY, _context->window);
 
-	if(_context->overlay->w != p->width ||
-		_context->overlay->h != p->height)
-	{
-		SDL_FreeYUVOverlay(_context->overlay);
-		_context->overlay = SDL_CreateYUVOverlay(p->width, p->height, SDL_IYUV_OVERLAY, _context->window);
-	}
+	//if(_context->overlay->w != p->width ||
+	//	_context->overlay->h != p->height)
+	//{
+	//	SDL_FreeYUVOverlay(_context->overlay);
+	//	_context->overlay = SDL_CreateYUVOverlay(p->width, p->height, SDL_IYUV_OVERLAY, _context->window);
+	//}
 
 	int elMS = SDL_GetTicks() - _beginTime;
 	int showMS = (int)(p->time * 1000);
@@ -65,7 +68,11 @@ void __stdcall Finished(void)
 	cout << "Finished." << endl;
 }
 
-static int InitSDL(int width, int height)
+void AudioCallback(void *userdata, Uint8 *stream, int len)
+{
+}
+
+static int InitSDL(FFSettings *setting)
 {
 	int ret = 0;
 	ret = SDL_Init(SDL_INIT_EVERYTHING);
@@ -74,9 +81,24 @@ static int InitSDL(int width, int height)
 	{
 		_context = (SDLPlayerContext *)malloc(sizeof(SDLPlayerContext));
 		memset(_context, 0, sizeof(SDLPlayerContext));
-		_context->window = SDL_SetVideoMode(width, height, 0, SDL_SWSURFACE | SDL_RESIZABLE);
+		_context->window = SDL_SetVideoMode(setting->width, setting->height + CONTROL_HEIGHT, 0, SDL_SWSURFACE | SDL_RESIZABLE);
 
+		_context->overlay = SDL_CreateYUVOverlay(setting->width, setting->height, SDL_IYUV_OVERLAY, _context->window);
 		SDL_WM_SetCaption("SDL Player", NULL);
+	}
+
+	if(ret >= 0)
+	{
+		SDL_AudioSpec wantedSpec;
+		wantedSpec.freq = setting->audioSampleRate;
+		wantedSpec.format = AUDIO_S16SYS;
+		wantedSpec.channels = setting->audioChannels;
+		wantedSpec.silence = 0;
+		wantedSpec.samples = SDL_AUDIO_BUFFER_SIZE;
+		wantedSpec.callback = AudioCallback;
+
+		SDL_AudioSpec spec;
+		SDL_OpenAudio(&wantedSpec, &spec);
 	}
 
 	return 0;
@@ -101,19 +123,19 @@ static void LoopEvents(FFSettings *pSettings, void *handle)
 				running = FALSE;
 				break;
 			case SDL_VIDEORESIZE:
-				w = event.resize.w;
-				h = event.resize.h;
-				r = w / (double)h;
-				if(r > srcR)
-					w = (int)(h * srcR + 0.5);
-				else if(r < srcR)
-					h = (int)(w / srcR + 0.5);
-				if(w % 2 != 0)
-					w -= 1;
-				if(h % 2 != 0)
-					h -= 1;
-				cout << "Resize w:" << w << " h:" << h << endl;
-				FF_SetResolution(handle, w, h);
+				//w = event.resize.w;
+				//h = event.resize.h;
+				//r = w / (double)h;
+				//if(r > srcR)
+				//	w = (int)(h * srcR + 0.5);
+				//else if(r < srcR)
+				//	h = (int)(w / srcR + 0.5);
+				//if(w % 2 != 0)
+				//	w -= 1;
+				//if(h % 2 != 0)
+				//	h -= 1;
+				//cout << "Resize w:" << w << " h:" << h << endl;
+				//FF_SetResolution(handle, w, h);
 				break;
 			default:
 				break;
@@ -151,7 +173,7 @@ int player(int argc, wchar_t *argv[])
 
 	if(err >= 0)
 	{
-		InitSDL(settings.width, settings.height);
+		InitSDL(&settings);
 	}
 
 	_beginTime = SDL_GetTicks();
@@ -253,7 +275,104 @@ int test(int argc, wchar_t *argv[])
 	return 0;
 }
 
+void test_play_sound_callback(void *userdata, uint8_t *stream, int len)
+{
+	cout << "test_play_sound_callback ";
+	cout << "len " << len << endl;
+	AVFormatContext *fmtCtx = (AVFormatContext *)userdata;
+	AVFrame *frame = avcodec_alloc_frame();
+	AVPacket pkt;
+	int gotFrame = -1;
+
+	av_init_packet(&pkt);
+	while(av_read_frame(fmtCtx, &pkt))
+	{
+		if(pkt.stream_index == 1)
+		{
+			break;
+		}
+	}
+
+	int decSize = avcodec_decode_audio4(fmtCtx->streams[1]->codec,
+					frame,
+					&gotFrame,
+					&pkt);
+}
+
+void test_play_sound(wchar_t *file)
+{
+	char szFile[1024] = {0};
+	AVFormatContext *fmtCtx = NULL;
+	int ret = 0;
+	AVPacket *pkt = NULL;
+	int audioIndex;
+	av_register_all();
+
+	WideCharToMultiByte(
+		CP_UTF8,
+		0,
+		file,
+		-1,
+		szFile,
+		1024,
+		NULL,
+		NULL);
+
+	ret = avformat_open_input(&fmtCtx, szFile, NULL, NULL);
+	ret = avformat_find_stream_info(fmtCtx, NULL);
+
+	for(unsigned int i = 0; i < fmtCtx->nb_streams; i++)
+	{
+		if(fmtCtx->streams[i]->codec->codec_type == AVMEDIA_TYPE_AUDIO)
+		{
+			audioIndex = i;
+			break;
+		}
+	}
+
+	SDL_Init(SDL_INIT_EVERYTHING);
+
+	AVStream *as = fmtCtx->streams[audioIndex];
+	AVCodec *codec = avcodec_find_decoder(as->codec->codec_id);
+	ret = avcodec_open2(as->codec, codec, NULL);
+
+	SDL_AudioSpec wantedSpec;
+	wantedSpec.freq = as->codec->sample_rate;
+	wantedSpec.format = AUDIO_S16SYS;
+	wantedSpec.channels = as->codec->channels;
+	wantedSpec.silence = 0;
+	wantedSpec.samples = 1024;
+	wantedSpec.callback = test_play_sound_callback;
+	wantedSpec.userdata = fmtCtx;
+
+	SDL_AudioSpec spec;
+	ret = SDL_OpenAudio(&wantedSpec, &spec);
+
+	if(ret < 0)
+	{
+		cout << "SDL_OpenAudio err " << ret << endl;
+	}
+
+	SDL_PauseAudio(0);
+
+	char msg[MAX_PATH] = {0};
+	while(cin >> msg)
+	{
+		if(strcmp(msg, "q") == 0)
+			break;
+	}
+
+	cout << "quit" << endl;
+	SDL_CloseAudio();
+	SDL_Quit();
+
+	avcodec_close(as->codec);
+	avformat_close_input(&fmtCtx);
+}
+
 int wmain(int argc, wchar_t *argv[])
 {
-	return player(argc, argv);
+	test_play_sound(argv[1]);
+
+	return 0;
 }

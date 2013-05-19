@@ -70,6 +70,8 @@ typedef struct _st_FFSettings
 	int fpsDen;
 	int timebaseNum;
 	int timebaseDen;
+	int audioSampleRate;
+	int audioChannels;
 	long long duration;
 	long long totalFrames;
 	char codecName[128];
