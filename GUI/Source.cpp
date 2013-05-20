@@ -374,30 +374,130 @@ void test_play_sound(wchar_t *file)
 	avformat_close_input(&fmtCtx);
 }
 
-int save_sound_file(wchar_t *srcFile, char *dstFile)
+static void print_frame(const AVFrame *frame, FILE *output)
 {
-	char szFile[1024] = {0};
-	AVFormatContext *fmtCtx = avformat_alloc_context();
+    const int n = frame->nb_samples * av_get_channel_layout_nb_channels(av_frame_get_channel_layout(frame));
+    const uint16_t *p     = (uint16_t*)frame->data[0];
+    const uint16_t *p_end = p + n;
+ 
+    while (p < p_end) {
+        fputc(*p    & 0xff, output);
+        fputc(*p>>8 & 0xff, output);
+        p++;
+    }
+    fflush(output);
+}
+
+int sample()
+{
+	const char *outfilename = "D:\\test.pcm";
+	const char *filename = "D:\\Music\\Avril Lavigne - Innocence.mp3";
+	AVFormatContext *pFormatCtx = NULL;
+	AVCodec *codec;
+	AVFrame *frame;
+	AVCodecContext *c = NULL;//编码格式
+	int out_size, len, audioStream, i, out_size2, buffer_size;
+	FILE *f, *outfile, *outfile2;
+	uint8_t *outbuf;
+	AVPacket avpkt;
+	/* register all the codecs */
+	avcodec_register_all();/*注册所有的编码解码器*/
+	av_register_all();// //注册所有可解码类型
+	av_init_packet(&avpkt);
+    
+	printf("Audio decoding\n");
+    
+	if(avformat_open_input(&pFormatCtx, filename, NULL, NULL) != 0)//打开要编码文件，将音频流信息读入输入容器（获取文件格式）
+		{
+				printf("open %s failed\n" , filename);
+				return -1;
+		}
+    
+		if(av_find_stream_info(pFormatCtx) < 0)//获取文件内音视频流的信息
+		{
+				printf("find stream info failed\n");
+				return -1;
+		}     
+          
+		av_dump_format(pFormatCtx, 0, filename, 0);
+    
+		audioStream = -1;
+		for(i=0; i<pFormatCtx->nb_streams; i++)
+		{
+
+			if(pFormatCtx->streams[i]->codec->codec_type == AVMEDIA_TYPE_AUDIO) {//从音视频流中循环查找媒体类型为音频的流
+				audioStream = i;
+				break;
+			}
+		} 
+
+		if(audioStream == -1)//这里表示未找到音频流
+		{
+				printf("find audioStream failed\n");
+				return -1;
+		}
+	c = pFormatCtx->streams[audioStream]->codec;//将找到音频流的编码格式赋值给c
+
+		/* find the mpeg audio decoder */
+		codec = avcodec_find_decoder(c->codec_id);//根据获取的编码格式查找对应的解码器
+		if (!codec) {
+			printf("codec not found\n");
+			return -1;
+		}
+
+		/* open it */
+		if (avcodec_open2(c, codec, NULL) < 0) {//打开解码器
+			printf("could not open codec\n");
+			return -1;
+		}
+
+		outbuf = (uint8_t *)malloc(AVCODEC_MAX_AUDIO_FRAME_SIZE);
+
+		outfile = fopen(outfilename, "wb");
+		if (!outfile) {
+			printf("open outfile failed\n");
+			av_free(c);
+			return -1;
+		}
+
+		while (av_read_frame(pFormatCtx, &avpkt) >= 0) {//zch 这边按帧读取音频流
+			out_size = AVCODEC_MAX_AUDIO_FRAME_SIZE;// 将输出大小设置为最大的音频帧大小
+                   
+			len = avcodec_decode_audio3(c, (short *)outbuf, &out_size, &avpkt);//zch 解码当前音频流到outbuf
+			//len = avcodec_decode_audio4(c, frame, &out_size, &avpkt);
+			 printf("Audio decoding %d\n", out_size);
+			if (len < 0) {
+				printf("Error while decoding\n");
+				continue;
+			}
+			if (out_size > 0) {
+				/* if a frame has been decoded, output it */
+				//fwrite(frame->data[0], 1, data_size, outfile);// 将解码后的数据写入输出文件中 
+				fwrite(outbuf, 1, out_size, outfile);
+
+				//if(out_size > 4096)
+				//{
+				//	fflush(outfile);
+				//	fwrite(outbuf+4096, 1, out_size-4096, outfile);
+				//	//fwrite(frame->data[0]+4096, 1, data_size-4096, outfile);
+				//}
+			}
+	}
+	return 0;
+}
+
+int save_sound4(char *srcFile, char *dstFile)
+{
+	AVFormatContext *fmtCtx = NULL;
 	int ret = 0;
 	int audioIndex;
 	FILE *dst = NULL;
 	av_register_all();
-	//avcodec_register_all();
 
-	WideCharToMultiByte(
-		CP_UTF8,
-		0,
-		srcFile,
-		-1,
-		szFile,
-		1024,
-		NULL,
-		NULL);
-
-	ret = avformat_open_input(&fmtCtx, szFile, NULL, NULL);
+	ret = avformat_open_input(&fmtCtx, srcFile, NULL, NULL);
 	ret = avformat_find_stream_info(fmtCtx, NULL);
 
-	av_dump_format(fmtCtx, 0, szFile, 0);
+	av_dump_format(fmtCtx, 0, srcFile, 0);
 	for(unsigned int i = 0; i < fmtCtx->nb_streams; i++)
 	{
 		if(fmtCtx->streams[i]->codec->codec_type == AVMEDIA_TYPE_AUDIO)
@@ -414,17 +514,80 @@ int save_sound_file(wchar_t *srcFile, char *dstFile)
 
 	dst = fopen(dstFile, "wb");
 
+	AVFrame *frame = avcodec_alloc_frame();
+	AVPacket packet;
+	av_init_packet(&packet);
+	while (av_read_frame(fmtCtx, &packet) >= 0)
+	{
+		if(packet.stream_index == audioIndex)
+		{
+			int got = 0;
+			avcodec_get_frame_defaults(frame);
+			int len = avcodec_decode_audio4(as->codec,
+				frame,
+				&got,
+				&packet);
+			if(len != packet.size)
+				cout << "Not equal." << endl;
+			if(!got)
+				cout << "Not got." << endl;
+			print_frame(frame, dst);
+		}
+		av_free_packet(&packet);
+	}
+	fclose(dst);
+	avcodec_close(as->codec);
+	avformat_close_input(&fmtCtx);
+	return 0;
+}
+
+int save_sound_file(char *srcFile, char *dstFile)
+{
+	AVFormatContext *fmtCtx = avformat_alloc_context();
+	int ret = 0;
+	int audioIndex;
+	FILE *dst = NULL;
+	av_register_all();
+
+	ret = avformat_open_input(&fmtCtx, srcFile, NULL, NULL);
+	ret = avformat_find_stream_info(fmtCtx, NULL);
+
+	av_dump_format(fmtCtx, 0, srcFile, 0);
+	for(unsigned int i = 0; i < fmtCtx->nb_streams; i++)
+	{
+		if(fmtCtx->streams[i]->codec->codec_type == AVMEDIA_TYPE_AUDIO)
+		{
+			audioIndex = i;
+			cout << "Audio index:" << i << endl;
+			break;
+		}
+	}
+
+	AVStream *as = fmtCtx->streams[audioIndex];
+	AVCodec *codec = avcodec_find_decoder(as->codec->codec_id);
+
+	if (codec->capabilities & CODEC_CAP_TRUNCATED)  
+    {  
+		as->codec->flags |= CODEC_CAP_TRUNCATED;  
+    }  
+
+	ret = avcodec_open2(as->codec, codec, NULL);
+
+	dst = fopen(dstFile, "wb");
+
 	AVPacket packet;
 	av_init_packet(&packet);
 	int out_size = 19200 * 100;
-	int totalsize = 0;
 	uint8_t * inbuf = (uint8_t *)av_malloc(out_size);
 	while (av_read_frame(fmtCtx, &packet) >= 0)
 	{
 		if(packet.stream_index == audioIndex)
 		{
 			out_size = 19200 * 100;
-			int len = avcodec_decode_audio3(as->codec,(int16_t *)inbuf,&out_size,&packet);
+			int len = avcodec_decode_audio3(as->codec,
+				(int16_t *)inbuf,
+				&out_size,
+				&packet);
 			if (len<0)
 			{
 				printf("Error while decoding.\n");
@@ -432,12 +595,18 @@ int save_sound_file(wchar_t *srcFile, char *dstFile)
 			if(out_size>0)
 			{
 				fwrite(inbuf, 1, out_size, dst);
-				totalsize+=out_size;
 			}
+			//if(out_size > 4096)
+			//{
+
+			//	fflush(dst);
+			//	fwrite(inbuf+4096, 1, out_size-4096, dst);
+			//	//fwrite(frame->data[0]+4096, 1, data_size-4096, outfile);
+			//}	
+
 		}
 		av_free_packet(&packet);
 	}
-	cout << "total size:" << totalsize << endl;
 	fclose(dst);
 	av_free(inbuf);
 	avcodec_close(as->codec);
@@ -578,8 +747,9 @@ int wmain(int argc, wchar_t *argv[])
 	//test_play_sound(argv[1]);
 	//test(argv[1]);
 	//player(argc, argv);
-	//save_sound_file(argv[1], "D:\\test.pcm");
-	decode("D:\\picandvideos\\20080528_p3_10.wmv");
-	play_sound_from_file("D:\\test.pcm");
+	save_sound_file("D:\\output.pcm", "D:\\test.pcm");
+	//decode("D:\\Movies\\CC_2011_Christmas_Party_3.wmv");
+	//play_sound_from_file("D:\\test.pcm");
+	//sample();
 	return 0;
 }
