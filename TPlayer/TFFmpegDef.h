@@ -108,8 +108,8 @@ typedef struct _st_FFContext
 	AVFormatContext *pFmtCtx;
 	AVStream *videoStream;
 	AVStream *audioStream;
-	int videoStreamIdx;
-	int audioStreamIdx;
+	int vsIndex; //video stream index
+	int asIndex; //audio stream index
 	int handleVideo;
 	int handleAudio;
 	enum AVPixelFormat dstPixFmt;

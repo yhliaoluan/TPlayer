@@ -11,6 +11,7 @@ public:
 	int Start();
 	int GetVideoPacket(FFPacketList **ppPkt);
 	int GetVideoPacketCount();
+	int GetAudioPacket(FFPacketList **ppPkt);
 	int FreeSinglePktList(FFPacketList **ppPkt);
 	int Init();
 	int SeekPos(int64_t pos);

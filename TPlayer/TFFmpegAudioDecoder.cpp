@@ -34,12 +34,41 @@ int TFFmpegAudioDecoder::Start()
 void __stdcall TFFmpegAudioDecoder::ThreadStart()
 {
 	DebugOutput("TFFmpegAudioDecoder::Thread begin.");
+	AVFrame *decFrame = NULL;
 	while(true)
 	{
 		if(_cmd & AUDIO_DECODER_CMD_EXIT)
 		{
 			DebugOutput("Audio decoder will exit.");
 			break;
+		}
+
+		FFPacketList *pkt = NULL;
+		if(_pkter->GetAudioPacket(&pkt) >= 0)
+		{
+			while(pkt->pPkt->size > 0)
+			{
+				int got = 0;
+				if(!decFrame)
+					decFrame = avcodec_alloc_frame();
+				else
+					avcodec_get_frame_defaults(decFrame);
+				int len1 = avcodec_decode_audio4(_ctx->audioStream->codec,
+					decFrame,
+					&got,
+					pkt->pPkt);
+
+				if(len1 < 0)
+				{
+					DebugOutput("avcodec_decode_audio4 ret %d", len1);
+					continue;
+				}
+
+				pkt->pPkt->data += len1;
+				pkt->pPkt->size -= len1;
+			}
+
+			_pkter->FreeSinglePktList(&pkt);
 		}
 	}
 	DebugOutput("Audio decoder exit.");

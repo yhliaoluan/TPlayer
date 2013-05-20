@@ -180,7 +180,7 @@ void __stdcall TFFmpegVideoDecoder::ThreadStart()
 {
 	DebugOutput("TFFmpegVideoDecoder::Thread DecodeThread begin.");
 	int64_t pdts = -1;
-	AVFrame *decVFrame = avcodec_alloc_frame();
+	AVFrame *decVFrame = NULL;
 	while(true)
 	{
 		if(_cmd & DecoderCmd_Exit)
@@ -193,6 +193,11 @@ void __stdcall TFFmpegVideoDecoder::ThreadStart()
 		{
 			int gotPic = 0;
 			AVPacket *pkt = (AVPacket *)pPktList->pPkt;
+			if(!decVFrame)
+				decVFrame = avcodec_alloc_frame();
+			else
+				avcodec_get_frame_defaults(decVFrame);
+
 			avcodec_decode_video2(_pCtx->videoStream->codec,
 				decVFrame, &gotPic, pkt);
 			TFF_ReleaseMutex(_mutex);

@@ -3,6 +3,7 @@
 
 TFFmpegPlayer::TFFmpegPlayer() :
 	_pDecoder(NULL),
+	_audioDecoder(NULL),
 	_pCtx(NULL),
 	_pPkter(NULL),
 	_cmd(Player_Cmd_None),
@@ -35,6 +36,11 @@ void TFFmpegPlayer::Uninit()
 	{
 		delete _pPkter;
 		_pPkter = NULL;
+	}
+	if(_audioDecoder)
+	{
+		delete _audioDecoder;
+		_audioDecoder = NULL;
 	}
 	TFF_DestroyCond(&_cmdCond);
 	CloseMutexP(&_cmdMutex);
@@ -157,6 +163,7 @@ int TFFmpegPlayer::Start()
 {
 	_pPkter->Start();
 	_pDecoder->Start();
+	_audioDecoder->Start();
 	if(!_hThread)
 		_hThread = TFF_CreateThread(SThreadStart, this);
 	return 0;
@@ -176,6 +183,13 @@ int TFFmpegPlayer::Init(const FFInitSetting *pSetting)
 	{
 		_pDecoder = new TFFmpegVideoDecoder(_pCtx, _pPkter);
 		ret = _pDecoder->Init();
+
+	}
+
+	if(ret >= 0)
+	{
+		_audioDecoder = new TFFmpegAudioDecoder(_pCtx, _pPkter);
+		_audioDecoder->Init();
 		_cmd |= Player_Cmd_Stop;
 	}
 	if(ret < 0)
@@ -214,9 +228,9 @@ int TFFmpegPlayer::InitCtx(const FFInitSetting *pSetting)
 
 	FreeCtx();
 	_pCtx = (FFContext *)av_mallocz(sizeof(FFContext));
-	_pCtx->videoStreamIdx = -1;
-	_pCtx->audioStreamIdx = -1;
-	_pCtx->handleAudio = 0;
+	_pCtx->vsIndex = -1;
+	_pCtx->asIndex = -1;
+	_pCtx->handleAudio = 1;
 	_pCtx->handleVideo = 1;
 	_pCtx->dstPixFmt = FF_GetAVPixFmt(pSetting->dstFramePixFmt);
 
@@ -252,21 +266,21 @@ int TFFmpegPlayer::InitCtx(const FFInitSetting *pSetting)
 	for(unsigned int i = 0; i < _pCtx->pFmtCtx->nb_streams; i++)
 	{
 		if(_pCtx->pFmtCtx->streams[i]->codec->codec_type == AVMEDIA_TYPE_VIDEO &&
-			_pCtx->videoStreamIdx < 0)
-			_pCtx->videoStreamIdx = i;
+			_pCtx->vsIndex < 0)
+			_pCtx->vsIndex = i;
 		else if(_pCtx->pFmtCtx->streams[i]->codec->codec_type == AVMEDIA_TYPE_AUDIO &&
-			_pCtx->audioStreamIdx < 0)
-			_pCtx->audioStreamIdx = i;
+			_pCtx->asIndex < 0)
+			_pCtx->asIndex = i;
 	}
 
-	if(_pCtx->videoStreamIdx == -1)
+	if(_pCtx->vsIndex == -1)
 	{
 		DebugOutput("Cannot find video stream.");
 		ret = FF_ERR_NO_VIDEO_STREAM;
 		return ret;
 	}
 	else
-		_pCtx->videoStream = _pCtx->pFmtCtx->streams[_pCtx->videoStreamIdx];
+		_pCtx->videoStream = _pCtx->pFmtCtx->streams[_pCtx->vsIndex];
 
 	ret = OpenVideoCodec();
 
@@ -277,10 +291,10 @@ int TFFmpegPlayer::InitCtx(const FFInitSetting *pSetting)
 		return ret;
 	}
 
-	if(_pCtx->audioStreamIdx == -1)
+	if(_pCtx->asIndex == -1)
 		DebugOutput("Cannot find audio stream.");
 	else
-		_pCtx->audioStream = _pCtx->pFmtCtx->streams[_pCtx->audioStreamIdx];
+		_pCtx->audioStream = _pCtx->pFmtCtx->streams[_pCtx->asIndex];
 
 	ret = OpenAudioCodec();
 	if(ret < 0)
@@ -293,8 +307,8 @@ int TFFmpegPlayer::InitCtx(const FFInitSetting *pSetting)
 	DebugOutput("Init stream successfully.");
 	DebugOutput("Width: %d Height: %d", _pCtx->videoStream->codec->width, _pCtx->videoStream->codec->height);
 	DebugOutput("Codec name: %s.", _pCtx->videoStream->codec->codec->long_name);
-	DebugOutput("Video stream index: %d", _pCtx->videoStreamIdx);
-	DebugOutput("Audio stream index: %d", _pCtx->audioStreamIdx);
+	DebugOutput("Video stream index: %d", _pCtx->vsIndex);
+	DebugOutput("Audio stream index: %d", _pCtx->asIndex);
 
 	_pCtx->dstWidth = _pCtx->videoStream->codec->width;
 	_pCtx->dstHeight = _pCtx->videoStream->codec->height;

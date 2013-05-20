@@ -72,10 +72,10 @@ int TFFmpegPacketer::SeekPos(int64_t pos)
 	TFF_GetMutex(_pVQ->mutex, TFF_INFINITE);
 
 	ClearPktQueue(_pVQ);
-	if(_pCtx->videoStreamIdx > 0)
+	if(_pCtx->vsIndex > 0)
 	{
 		err = av_seek_frame(_pCtx->pFmtCtx,
-			_pCtx->videoStreamIdx,
+			_pCtx->vsIndex,
 			pos,
 			AVSEEK_FLAG_BACKWARD);
 	}
@@ -85,10 +85,10 @@ int TFFmpegPacketer::SeekPos(int64_t pos)
 	TFF_GetMutex(_pAQ->mutex, TFF_INFINITE);
 	
 	ClearPktQueue(_pAQ);
-	if(_pCtx->audioStreamIdx > 0)
+	if(_pCtx->asIndex > 0)
 	{
 		err = av_seek_frame(_pCtx->pFmtCtx,
-			_pCtx->audioStreamIdx,
+			_pCtx->asIndex,
 			pos,
 			AVSEEK_FLAG_BACKWARD);
 	}
@@ -150,9 +150,9 @@ void __stdcall TFFmpegPacketer::ThreadStart()
 		TFF_ReleaseMutex(_avReadMutex);
 		if(readRet >= 0)
 		{
-			if(_pCtx->handleVideo && pPkt->stream_index == _pCtx->videoStreamIdx)
+			if(_pCtx->handleVideo && pPkt->stream_index == _pCtx->vsIndex)
 				PutIntoPktQueue(_pVQ, pPkt);
-			else if(_pCtx->handleAudio && pPkt->stream_index == _pCtx->audioStreamIdx)
+			else if(_pCtx->handleAudio && pPkt->stream_index == _pCtx->asIndex)
 				PutIntoPktQueue(_pAQ, pPkt);
 			else
 			{
@@ -180,6 +180,11 @@ int TFFmpegPacketer::GetVideoPacket(FFPacketList **ppPktList)
 	return GetPacket(_pVQ, ppPktList);
 }
 
+int TFFmpegPacketer::GetAudioPacket(FFPacketList **ppPkt)
+{
+	return GetPacket(_pAQ, ppPkt);
+}
+
 int TFFmpegPacketer::GetPacket(FFPacketQueue *q, FFPacketList **ppPkt)
 {
 	int ret = 0;
@@ -187,7 +192,11 @@ int TFFmpegPacketer::GetPacket(FFPacketQueue *q, FFPacketList **ppPkt)
 
 	while(q->count == 0 && 
 		!_isFinished)
+	{
+		DebugOutput("Count of packet queue is 0 and not finished. Will wait for cond. Queue type %d", q->type);
 		TFF_WaitCond(q->cond, q->mutex);
+		DebugOutput("Got signal. Queue type %d", q->type);
+	}
 
 	if(_isFinished)
 	{

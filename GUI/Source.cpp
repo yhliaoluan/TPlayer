@@ -1,4 +1,4 @@
-#include <Windows.h>
+﻿#include <Windows.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <iostream>
@@ -17,6 +17,10 @@ using std::endl;
 
 #define CONTROL_HEIGHT 100
 #define SDL_AUDIO_BUFFER_SIZE 1024
+
+#define AUDIO_INBUF_SIZE 20480
+#define AUDIO_REFILL_THRESH 4096
+#define AVCODEC_MAX_AUDIO_FRAME_SIZE 409600
 
 typedef struct _st_PlayContext
 {
@@ -206,7 +210,7 @@ int player(int argc, wchar_t *argv[])
 	return 0;
 }
 
-int test(int argc, wchar_t *argv[])
+int test(wchar_t *file)
 {
 	char szFile[1024] = {0};
 	AVFormatContext *fmtCtx = NULL;
@@ -218,7 +222,7 @@ int test(int argc, wchar_t *argv[])
 	WideCharToMultiByte(
 		CP_UTF8,
 		0,
-		argv[1],
+		file,
 		-1,
 		szFile,
 		1024,
@@ -370,9 +374,212 @@ void test_play_sound(wchar_t *file)
 	avformat_close_input(&fmtCtx);
 }
 
+int save_sound_file(wchar_t *srcFile, char *dstFile)
+{
+	char szFile[1024] = {0};
+	AVFormatContext *fmtCtx = avformat_alloc_context();
+	int ret = 0;
+	int audioIndex;
+	FILE *dst = NULL;
+	av_register_all();
+	//avcodec_register_all();
+
+	WideCharToMultiByte(
+		CP_UTF8,
+		0,
+		srcFile,
+		-1,
+		szFile,
+		1024,
+		NULL,
+		NULL);
+
+	ret = avformat_open_input(&fmtCtx, szFile, NULL, NULL);
+	ret = avformat_find_stream_info(fmtCtx, NULL);
+
+	av_dump_format(fmtCtx, 0, szFile, 0);
+	for(unsigned int i = 0; i < fmtCtx->nb_streams; i++)
+	{
+		if(fmtCtx->streams[i]->codec->codec_type == AVMEDIA_TYPE_AUDIO)
+		{
+			audioIndex = i;
+			cout << "Audio index:" << i << endl;
+			break;
+		}
+	}
+
+	AVStream *as = fmtCtx->streams[audioIndex];
+	AVCodec *codec = avcodec_find_decoder(as->codec->codec_id);
+	ret = avcodec_open2(as->codec, codec, NULL);
+
+	dst = fopen(dstFile, "wb");
+
+	AVPacket packet;
+	av_init_packet(&packet);
+	int out_size = 19200 * 100;
+	int totalsize = 0;
+	uint8_t * inbuf = (uint8_t *)av_malloc(out_size);
+	while (av_read_frame(fmtCtx, &packet) >= 0)
+	{
+		if(packet.stream_index == audioIndex)
+		{
+			out_size = 19200 * 100;
+			int len = avcodec_decode_audio3(as->codec,(int16_t *)inbuf,&out_size,&packet);
+			if (len<0)
+			{
+				printf("Error while decoding.\n");
+			}
+			if(out_size>0)
+			{
+				fwrite(inbuf, 1, out_size, dst);
+				totalsize+=out_size;
+			}
+		}
+		av_free_packet(&packet);
+	}
+	cout << "total size:" << totalsize << endl;
+	fclose(dst);
+	av_free(inbuf);
+	avcodec_close(as->codec);
+	avformat_close_input(&fmtCtx);
+	return 0;
+}
+
+void play_sound_cb1(void *userdata, uint8_t *stream, int len)
+{
+	FILE *file = (FILE *)userdata;
+	fread(stream, 1, len, file);
+}
+
+void play_sound_from_file(char *file)
+{
+	SDL_Init(SDL_INIT_EVERYTHING);
+
+	FILE *f = fopen(file, "rb");
+
+	SDL_AudioSpec wantedSpec;
+	wantedSpec.freq = 44100;
+	wantedSpec.format = AUDIO_S16SYS;
+	wantedSpec.channels = 2;
+	wantedSpec.silence = 0;
+	wantedSpec.samples = 1024;
+	wantedSpec.callback = play_sound_cb1;
+	wantedSpec.userdata = f;
+
+	SDL_AudioSpec spec;
+	int ret = SDL_OpenAudio(&wantedSpec, &spec);
+
+	SDL_PauseAudio(0);
+
+	char cmd[30] = {0};
+	while(cin >> cmd)
+	{
+		if(strcmp(cmd, "q") == 0)
+			break;
+	}
+
+	SDL_CloseAudio();
+	fclose(f);
+}
+
+int decode(const char* input_filename)
+{
+  av_register_all();
+
+  AVFormatContext* container=avformat_alloc_context();
+  if(avformat_open_input(&container,input_filename,NULL,NULL)<0){
+    printf("Could not open file");
+  }
+
+  if(avformat_find_stream_info(container, NULL)<0){
+      printf("Could not find file info");
+  }
+  av_dump_format(container,0,input_filename,false);
+
+  int stream_id=-1;
+  int i;
+  for(i=0;i<container->nb_streams;i++){
+    if(container->streams[i]->codec->codec_type==AVMEDIA_TYPE_AUDIO){
+        stream_id=i;
+        break;
+    }
+  }
+  if(stream_id==-1){
+    printf("Could not find Audio Stream");
+  }
+
+  AVDictionary *metadata=container->metadata;
+  AVCodecContext *ctx=container->streams[stream_id]->codec;
+  AVCodec *codec=avcodec_find_decoder(ctx->codec_id);
+
+  if(codec==NULL){
+    printf("cannot find codec!");
+  }
+
+  if(avcodec_open2(ctx,codec,NULL)<0){
+     printf("Codec cannot be found");
+  }
+
+  AVSampleFormat sfmt = ctx->sample_fmt;
+
+  AVPacket packet;
+  av_init_packet(&packet);
+  AVFrame *frame = avcodec_alloc_frame();
+
+  int buffer_size = AVCODEC_MAX_AUDIO_FRAME_SIZE+ FF_INPUT_BUFFER_PADDING_SIZE;
+  uint8_t *buffer = (uint8_t *)av_mallocz(buffer_size);
+  packet.data=buffer;
+  packet.size =buffer_size;
+
+  FILE *outfile = fopen("D:\\test.pcm", "wb");
+
+  int len;
+  int frameFinished=0;
+
+  while(av_read_frame(container,&packet) >= 0)
+  {
+      if(packet.stream_index==stream_id)
+      {
+        //printf("Audio Frame read \n");
+        int len=avcodec_decode_audio4(ctx, frame, &frameFinished, &packet);
+
+        if(frameFinished)
+        {       
+          if (sfmt==AV_SAMPLE_FMT_S16P)
+          { // Audacity: 16bit PCM little endian stereo
+            int16_t* ptr_l = (int16_t*)frame->extended_data[0];
+            int16_t* ptr_r = (int16_t*)frame->extended_data[1];
+            for (int i=0; i<frame->nb_samples; i++)
+            {
+              fwrite(ptr_l++, sizeof(int16_t), 1, outfile);
+              fwrite(ptr_r++, sizeof(int16_t), 1, outfile);
+            }
+          }
+          else if (sfmt==AV_SAMPLE_FMT_FLTP)
+          { //Audacity: big endian 32bit stereo start offset 7 (but has noise)
+            float* ptr_l = (float*)frame->extended_data[0];
+            float* ptr_r = (float*)frame->extended_data[1];
+            for (int i=0; i<frame->nb_samples; i++)
+            {
+                fwrite(ptr_l++, sizeof(float), 1, outfile);
+                fwrite(ptr_r++, sizeof(float), 1, outfile);
+             }
+           }            
+        }
+    }
+}
+fclose(outfile);
+av_close_input_file(container);
+return 0;  
+}
+
 int wmain(int argc, wchar_t *argv[])
 {
-	test_play_sound(argv[1]);
-
+	//test_play_sound(argv[1]);
+	//test(argv[1]);
+	//player(argc, argv);
+	//save_sound_file(argv[1], "D:\\test.pcm");
+	decode("D:\\picandvideos\\20080528_p3_10.wmv");
+	play_sound_from_file("D:\\test.pcm");
 	return 0;
 }

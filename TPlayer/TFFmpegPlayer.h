@@ -4,6 +4,7 @@
 #include "TFFmpegDef.h"
 #include "TFFmpegVideoDecoder.h"
 #include "TFFmpegPacketer.h"
+#include "TFFmpegAudioDecoder.h"
 
 class TFFmpegPlayer
 {
@@ -24,6 +25,7 @@ public:
 private:
 	FFContext *_pCtx;
 	TFFmpegVideoDecoder *_pDecoder;
+	TFFmpegAudioDecoder *_audioDecoder;
 	TFFmpegPacketer *_pPkter;
 	TFF_Thread _hThread;
 	NewFrameCB _fNewFrameCB;
