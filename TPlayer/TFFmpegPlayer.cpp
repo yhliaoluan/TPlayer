@@ -60,8 +60,8 @@ void TFFmpegPlayer::ThreadStart()
 	int ret = 0;
 	BOOL holdMutex = FALSE;
 	FFFrame frame = {0};
-	FFFrameList *pFrame = NULL;
-	while(true)
+	FFVideoFrame *pFrame = NULL;
+	while(1)
 	{
 		if(holdMutex)
 			holdMutex = FALSE;
@@ -232,7 +232,7 @@ int TFFmpegPlayer::InitCtx(const FFInitSetting *pSetting)
 	_pCtx->asIndex = -1;
 	_pCtx->handleAudio = 1;
 	_pCtx->handleVideo = 1;
-	_pCtx->dstPixFmt = FF_GetAVPixFmt(pSetting->dstFramePixFmt);
+	_pCtx->pixFmt = FF_GetAVPixFmt(pSetting->dstFramePixFmt);
 
 	WideCharToMultiByte(
 		CP_UTF8,
@@ -310,8 +310,14 @@ int TFFmpegPlayer::InitCtx(const FFInitSetting *pSetting)
 	DebugOutput("Video stream index: %d", _pCtx->vsIndex);
 	DebugOutput("Audio stream index: %d", _pCtx->asIndex);
 
-	_pCtx->dstWidth = _pCtx->videoStream->codec->width;
-	_pCtx->dstHeight = _pCtx->videoStream->codec->height;
+	_pCtx->width = _pCtx->videoStream->codec->width;
+	_pCtx->height = _pCtx->videoStream->codec->height;
+	if(_pCtx->audioStream)
+	{
+		_pCtx->channelLayout = av_get_default_channel_layout(_pCtx->audioStream->codec->channels);
+		_pCtx->sampleFmt = FF_GetAVSampleFmt(FF_AUDIO_SAMPLE_FMT_S16);
+		_pCtx->freq = _pCtx->audioStream->codec->sample_rate;
+	}
 	return ret;
 }
 
@@ -363,10 +369,39 @@ int TFFmpegPlayer::Seek(double time)
 	return 0;
 }
 
-int TFFmpegPlayer::PopOneFrame(FFFrame *frame, FFFrameList **ppFrame)
+int TFFmpegPlayer::FreeAudioFrame(FFFrame *frame)
+{
+	if(frame && frame->data)
+	{
+		av_free(frame->data[0]);
+		av_free(frame->data);
+		av_free(frame->linesize);
+	}
+	memset(frame, 0, sizeof(FFFrame));
+	return 0;
+}
+
+int TFFmpegPlayer::PopAudioFrame(FFFrame *frame)
+{
+	FFAudioFrame *audioFrame = NULL;
+	if(_audioDecoder->Pop(&audioFrame) < 0)
+	{
+		return FF_EOF;
+	}
+	frame->buff = audioFrame->buffer;
+	frame->data = (unsigned char **)av_malloc(sizeof(unsigned char *));
+	frame->data[0] = frame->buff;
+	frame->size = audioFrame->size;
+	frame->linesize = (int *)av_malloc(sizeof(int));
+	frame->linesize[0] = frame->size;
+	av_freep(&audioFrame);
+	return 0;
+}
+
+int TFFmpegPlayer::PopOneFrame(FFFrame *frame, FFVideoFrame **ppFrame)
 {
 	int ret = 0;
-	FFFrameList *pFrameList = NULL;
+	FFVideoFrame *pFrameList = NULL;
 	if((ret = _pDecoder->Pop(&pFrameList)) < 0)
 	{
 		*ppFrame = NULL;

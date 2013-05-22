@@ -17,12 +17,12 @@ public:
 	int SeekPos(int64_t pos);
 	BOOL IsFinished();
 private:
-	TFF_Event _hEOFEvent;
 	TFF_Thread _hThread;
-	TFF_Mutex _avReadMutex;
-	FFPacketQueue *_pVQ;
-	FFPacketQueue *_pAQ;
-	FFContext *_pCtx;
+	TFF_Cond _readCond;
+	TFF_Mutex _readMutex;
+	FFPacketQueue *_videoQ;
+	FFPacketQueue *_audioQ;
+	FFContext *_ctx;
 	BOOL _isFinished;
 
 #define PKT_Q_VIDEO			1
@@ -31,7 +31,6 @@ private:
 
 #define	PkterCmd_None  0x0000
 #define	PkterCmd_Exit  0x0001
-#define PkterCmd_Abandon 0x0002
 	int _cmd;
 
 	//put 

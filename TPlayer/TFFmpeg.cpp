@@ -146,3 +146,18 @@ int __stdcall FF_SetResolution(void *p, int width, int height)
 		player->SetResolution(width, height);
 	return 0;
 }
+
+int __stdcall FF_PopAudioFrame(void *p, FFFrame *frame)
+{
+	TFFmpegPlayer *player = (TFFmpegPlayer *)p;
+	if(player)
+		return player->PopAudioFrame(frame);
+	return FF_ERR_NOPOINTER;
+}
+int __stdcall FF_FreeAudioFrame(void *p, FFFrame *frame)
+{
+	TFFmpegPlayer *player = (TFFmpegPlayer *)p;
+	if(player)
+		return player->FreeAudioFrame(frame);
+	return FF_ERR_NOPOINTER;
+}

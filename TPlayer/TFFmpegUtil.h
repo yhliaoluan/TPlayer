@@ -53,4 +53,10 @@ FF_GetAVPixFmt(int ffFmt)
 	}
 }
 
+inline enum AVSampleFormat
+FF_GetAVSampleFmt(int fmt)
+{
+	return AV_SAMPLE_FMT_S16;
+}
+
 #endif

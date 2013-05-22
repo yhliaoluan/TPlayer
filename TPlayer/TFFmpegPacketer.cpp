@@ -2,49 +2,46 @@
 #include "TFFmpegUtil.h"
 
 #define FF_MAX_PACKET_COUNT 50
+#define FF_MIN_PACKET_COUNT 5
 
-#define FF_MAX_PACKET_SIZE 0x00300000
+//32MB
+#define FF_MAX_PACKET_SIZE 0x02000000
 
 TFFmpegPacketer::TFFmpegPacketer(FFContext *p)
 	:_hThread(NULL),
-	_pVQ(NULL),
-	_pAQ(NULL),
+	_videoQ(NULL),
+	_audioQ(NULL),
 	_cmd(PkterCmd_None),
 	_isFinished(FALSE),
-	_hEOFEvent(NULL),
-	_avReadMutex(NULL)
+	_readMutex(NULL),
+	_readCond(NULL)
 {
-	_pCtx = p;
+	_ctx = p;
 }
 
 TFFmpegPacketer::~TFFmpegPacketer()
 {
 	_cmd |= PkterCmd_Exit;
-	TFF_SetEvent(_hEOFEvent);
-	TFF_CondBroadcast(_pVQ->cond);
-	TFF_CondBroadcast(_pAQ->cond);
+	TFF_CondBroadcast(_readCond);
 	if(_hThread)
 	{
 		TFF_WaitThread(_hThread, 1000);
 		CloseThreadP(&_hThread);
 	}
-	DestroyPktQueue(&_pVQ);
-	DestroyPktQueue(&_pAQ);
-	CloseEventP(&_hEOFEvent);
-	CloseMutexP(&_avReadMutex);
+	DestroyPktQueue(&_videoQ);
+	DestroyPktQueue(&_audioQ);
+	TFF_CloseMutex(_readMutex);
+	TFF_DestroyCond(&_readCond);
 }
 
 int TFFmpegPacketer::Init()
 {
-	//create eof event
-	_hEOFEvent = TFF_CreateEvent(FALSE, FALSE);
-
 	//create packet queue
-	InitPacketQueue(&_pVQ, PKT_Q_VIDEO);
-	InitPacketQueue(&_pAQ, PKT_Q_AUDIO);
+	InitPacketQueue(&_videoQ, PKT_Q_VIDEO);
+	InitPacketQueue(&_audioQ, PKT_Q_AUDIO);
 
-	//create av read mutex
-	_avReadMutex = TFF_CreateMutex();
+	_readCond = TFF_CreateCond();
+	_readMutex = TFF_CreateMutex();
 	return 0;
 }
 
@@ -68,48 +65,38 @@ int TFFmpegPacketer::Start()
 int TFFmpegPacketer::SeekPos(int64_t pos)
 {
 	int err = 0;
-	TFF_GetMutex(_avReadMutex, TFF_INFINITE);
-	TFF_GetMutex(_pVQ->mutex, TFF_INFINITE);
+	TFF_GetMutex(_readMutex, TFF_INFINITE);
+	TFF_GetMutex(_videoQ->mutex, TFF_INFINITE);
+	TFF_GetMutex(_audioQ->mutex, TFF_INFINITE);
 
-	ClearPktQueue(_pVQ);
-	if(_pCtx->vsIndex > 0)
+	ClearPktQueue(_videoQ);
+	if(_ctx->vsIndex > 0)
 	{
-		err = av_seek_frame(_pCtx->pFmtCtx,
-			_pCtx->vsIndex,
-			pos,
-			AVSEEK_FLAG_BACKWARD);
+		err = av_seek_frame(_ctx->pFmtCtx, _ctx->vsIndex, pos, AVSEEK_FLAG_BACKWARD);
+		if(err < 0)
+			DebugOutput("TFFmpegPacketer::SeekPos video ret %d", err);
 	}
-	if(err < 0)
-		DebugOutput("TFFmpegPacketer::SeekPos video ret %d", err);
 
-	TFF_GetMutex(_pAQ->mutex, TFF_INFINITE);
-	
-	ClearPktQueue(_pAQ);
-	if(_pCtx->asIndex > 0)
+	ClearPktQueue(_audioQ);
+	if(_ctx->asIndex > 0)
 	{
-		err = av_seek_frame(_pCtx->pFmtCtx,
-			_pCtx->asIndex,
-			pos,
-			AVSEEK_FLAG_BACKWARD);
+		err = av_seek_frame(_ctx->pFmtCtx, _ctx->asIndex, pos, AVSEEK_FLAG_BACKWARD);
+		if(err < 0)
+			DebugOutput("TFFmpegPacketer::SeekPos audio ret %d", err);
 	}
-	if(err < 0)
-		DebugOutput("TFFmpegPacketer::SeekPos video ret %d", err);
 
-	_cmd |= PkterCmd_Abandon;
 	_isFinished = FALSE;
 
-	TFF_SetEvent(_hEOFEvent);
-	TFF_CondBroadcast(_pVQ->cond);
-	TFF_CondBroadcast(_pAQ->cond);
-	TFF_ReleaseMutex(_pAQ->mutex);
-	TFF_ReleaseMutex(_pVQ->mutex);
-	TFF_ReleaseMutex(_avReadMutex);
+	TFF_CondBroadcast(_readCond);
+	TFF_ReleaseMutex(_audioQ->mutex);
+	TFF_ReleaseMutex(_videoQ->mutex);
+	TFF_ReleaseMutex(_readMutex);
 	return 0;
 }
 
 int TFFmpegPacketer::GetVideoPacketCount()
 {
-	return GetPacketCount(_pVQ);
+	return GetPacketCount(_videoQ);
 }
 
 int TFFmpegPacketer::GetPacketCount(FFPacketQueue *q)
@@ -136,24 +123,31 @@ void __stdcall TFFmpegPacketer::ThreadStart()
 {
 	DebugOutput("TFFmpegPacketer::Thread begin.");
 	int readRet = 0;
-	while(true)
+	while(1)
 	{
 		if(_cmd & PkterCmd_Exit)
 			break;
 
+		TFF_GetMutex(_readMutex, TFF_INFINITE);
+		while(_videoQ->size + _audioQ->size >= FF_MAX_PACKET_SIZE
+			&& !(_cmd & PkterCmd_Exit))
+		{
+			TFF_WaitCond(_readCond, _readMutex);
+		}
 		AVPacket *pPkt = (AVPacket *)av_mallocz(sizeof(AVPacket));
 		av_init_packet(pPkt);
-		//DebugOutput("TFFmpegPacketer::Thread Before av_read_frame\n");
-		TFF_GetMutex(_avReadMutex, TFF_INFINITE);
-		readRet = av_read_frame(_pCtx->pFmtCtx, pPkt);
-		_cmd &= ~PkterCmd_Abandon;
-		TFF_ReleaseMutex(_avReadMutex);
+		readRet = av_read_frame(_ctx->pFmtCtx, pPkt);
 		if(readRet >= 0)
 		{
-			if(_pCtx->handleVideo && pPkt->stream_index == _pCtx->vsIndex)
-				PutIntoPktQueue(_pVQ, pPkt);
-			else if(_pCtx->handleAudio && pPkt->stream_index == _pCtx->asIndex)
-				PutIntoPktQueue(_pAQ, pPkt);
+			DebugOutput("index:%d dts:%d pts:%d time:%f",
+				pPkt->stream_index,
+				(int)pPkt->dts,
+				(int)pPkt->pts,
+				(double)(pPkt->dts * av_q2d(_ctx->pFmtCtx->streams[pPkt->stream_index]->time_base)));
+			if(_ctx->handleVideo && pPkt->stream_index == _ctx->vsIndex)
+				PutIntoPktQueue(_videoQ, pPkt);
+			else if(_ctx->handleAudio && pPkt->stream_index == _ctx->asIndex)
+				PutIntoPktQueue(_audioQ, pPkt);
 			else
 			{
 				//DebugOutput("TFFmpegPacketer::Thread drop packet.\n");
@@ -166,23 +160,24 @@ void __stdcall TFFmpegPacketer::ThreadStart()
 			av_free(pPkt);
 			DebugOutput("TFFmpegPacketer::Thread to end of file.\n");
 			_isFinished = TRUE;
-			TFF_CondBroadcast(_pVQ->cond);
-			TFF_CondBroadcast(_pAQ->cond);
-			TFF_WaitEvent(_hEOFEvent, TFF_INFINITE);
-			DebugOutput("TFFmpegPacketer::Thread awake from hPktThreadWaitEvent.\n");
+			TFF_CondBroadcast(_videoQ->cond);
+			TFF_CondBroadcast(_audioQ->cond);
+			TFF_WaitCond(_readCond, _readMutex);
+			DebugOutput("TFFmpegPacketer::Thread awake.\n");
 		}
+		TFF_ReleaseMutex(_readMutex);
 	}
 	DebugOutput("TFFmpegPacketer::Thread exit.");
 }
 
 int TFFmpegPacketer::GetVideoPacket(FFPacketList **ppPktList)
 {
-	return GetPacket(_pVQ, ppPktList);
+	return GetPacket(_videoQ, ppPktList);
 }
 
 int TFFmpegPacketer::GetAudioPacket(FFPacketList **ppPkt)
 {
-	return GetPacket(_pAQ, ppPkt);
+	return GetPacket(_audioQ, ppPkt);
 }
 
 int TFFmpegPacketer::GetPacket(FFPacketQueue *q, FFPacketList **ppPkt)
@@ -190,7 +185,7 @@ int TFFmpegPacketer::GetPacket(FFPacketQueue *q, FFPacketList **ppPkt)
 	int ret = 0;
 	TFF_GetMutex(q->mutex, TFF_INFINITE);
 
-	while(q->count == 0 && 
+	while(q->count == 0 &&
 		!_isFinished)
 	{
 		DebugOutput("Count of packet queue is 0 and not finished. Will wait for cond. Queue type %d", q->type);
@@ -198,7 +193,7 @@ int TFFmpegPacketer::GetPacket(FFPacketQueue *q, FFPacketList **ppPkt)
 		DebugOutput("Got signal. Queue type %d", q->type);
 	}
 
-	if(_isFinished)
+	if(q->count == 0 && _isFinished)
 	{
 		*ppPkt = NULL;
 		ret = -1;
@@ -210,8 +205,8 @@ int TFFmpegPacketer::GetPacket(FFPacketQueue *q, FFPacketList **ppPkt)
 		q->count--;
 		q->size -= first->pPkt->size;
 		*ppPkt = first;
-		if(q->count < (FF_MAX_PACKET_COUNT / 2))
-			TFF_CondBroadcast(q->cond);
+		if(q->count <= 1)
+			TFF_CondBroadcast(_readCond);
 	}
 	TFF_ReleaseMutex(q->mutex);
 	return ret;
@@ -221,36 +216,20 @@ int TFFmpegPacketer::PutIntoPktQueue(
 		FFPacketQueue *q,
 		AVPacket *pPkt)
 {
-	FFPacketList *pNew = NULL;
 	TFF_GetMutex(q->mutex, TFF_INFINITE);
-	while(q->count >= FF_MAX_PACKET_COUNT &&
-		!(_cmd & PkterCmd_Abandon) &&
-		!(_cmd & PkterCmd_Exit))
-		TFF_WaitCond(q->cond, q->mutex);
-
-	if((_cmd & PkterCmd_Abandon) || 
-		(_cmd & PkterCmd_Exit))
-	{
-		DebugOutput("Packet abandon.");
-		av_free_packet(pPkt);
-		av_free(pPkt);
-	}
+	FFPacketList *pNew = (FFPacketList *)av_mallocz(sizeof(FFPacketList));
+	pNew->pPkt = pPkt;
+	if(q->count == 0)
+		q->first = q->last = pNew;
 	else
 	{
-		pNew = (FFPacketList *)av_mallocz(sizeof(FFPacketList));
-		pNew->pPkt = pPkt;
-		if(q->count == 0)
-			q->first = q->last = pNew;
-		else
-		{
-			q->last->next = pNew;
-			q->last = pNew;
-		}
-		q->count++;
-		q->size += pPkt->size;
-		if(q->count == 1)
-			TFF_CondBroadcast(q->cond);
+		q->last->next = pNew;
+		q->last = pNew;
 	}
+	q->count++;
+	q->size += pPkt->size;
+	if(q->count == 1)
+		TFF_CondBroadcast(q->cond);
 	TFF_ReleaseMutex(q->mutex);
 	return 0;
 }
@@ -286,7 +265,7 @@ int TFFmpegPacketer::FreeSinglePktList(FFPacketList **ppPktList)
 	FFPacketList *pPktList = *ppPktList;
 	if(pPktList->pPkt != NULL)
 	{
-		av_free_packet((AVPacket *)pPktList->pPkt);
+		av_free_packet(pPktList->pPkt);
 		av_free(pPktList->pPkt);
 	}
 	av_free(pPktList);

@@ -11,12 +11,12 @@ public:
 	virtual ~TFFmpegVideoDecoder();
 	int Start();
 	//Get and remove first frame.
-	int Pop(FFFrameList **);
+	int Pop(FFVideoFrame **);
 	//Get but not remove first frame.
-	int Get(FFFrameList **);
+	int Get(FFVideoFrame **);
 	int GetFrameCount();
 	int Init();
-	int FreeSingleFrameList(FFFrameList **);
+	int FreeSingleFrameList(FFVideoFrame **);
 	int SeekPos(int64_t pos);
 	BOOL IsFinished();
 	int SetResolution(int width, int height);
@@ -24,7 +24,7 @@ private:
 	TFF_Event _hEOFEvent;
 	TFF_Thread _hThread;
 	TFF_Mutex _mutex;
-	FFFrameQueue *_pVQ;
+	FFFrameQueue *_queue;
 	FFContext *_pCtx;
 	TFFmpegPacketer *_pPkter;
 	BOOL _isFinished;
@@ -36,14 +36,14 @@ private:
 	int _cmd;
 
 	//put 
-	int PutIntoFrameList(FFFrameList *);
+	int PutIntoFrameList(FFVideoFrame *);
 	int PutIntoFrameList(AVFrame *pDecVFrame, int64_t pktDts, int64_t pdts);
 	int Flush(int64_t pos, BOOL seekToPos = FALSE);
 
 	void __stdcall ThreadStart();
 	int ClearFrameQueue();
 	int DestroyFrameQueue();
-	int AllocDstFrame(OUT FFFrameList **);
+	int AllocDstFrame(OUT FFVideoFrame **);
 	static unsigned long __stdcall SThreadStart(void *);
 };
 #endif

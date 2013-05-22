@@ -22,6 +22,8 @@ public:
 	int GetVideoInfo(FFSettings *);
 	int GetCurFrame();
 	int SetResolution(int w, int h);
+	int PopAudioFrame(FFFrame *);
+	int FreeAudioFrame(FFFrame *);
 private:
 	FFContext *_pCtx;
 	TFFmpegVideoDecoder *_pDecoder;
@@ -48,7 +50,7 @@ private:
 	static unsigned long __stdcall SThreadStart(void *);
 	void ThreadStart(void);
 	int InitCtx(const FFInitSetting *pSetting);
-	int PopOneFrame(OUT FFFrame *, FFFrameList **);
+	int PopOneFrame(OUT FFFrame *, FFVideoFrame **);
 	void OnNewFrame(IN FFFrame *);
 	void OnFinished(void);
 	void FreeCtx(void);

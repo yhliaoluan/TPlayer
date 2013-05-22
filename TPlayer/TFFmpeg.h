@@ -40,4 +40,7 @@ int __stdcall FF_Scale(void *pCtx,
 
 int __stdcall FF_SetResolution(void *p, int width, int height);
 
+int __stdcall FF_PopAudioFrame(void *,FFFrame *);
+int __stdcall FF_FreeAudioFrame(void *,FFFrame *);
+
 #endif

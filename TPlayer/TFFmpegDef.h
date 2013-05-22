@@ -8,8 +8,6 @@ extern "C"
 #include <libswscale\swscale.h>
 }
 
-enum FFFrameOpe { FrameOpe_None };
-
 enum FFCmd
 {
 	FFCmd_None,
@@ -42,16 +40,22 @@ typedef struct _st_FFSeekPosPkt
 	int64_t pos;
 } FFSeekPosPkt;
 
-typedef struct _st_FFFrameList
+typedef struct _st_FFVideoFrame
 {
 	AVFrame *pFrame;
 	uint8_t *buffer;
-	enum FFFrameOpe ope;
 	int width;
 	int height;
 	size_t size;
-	struct _st_FFFrameList *next;
-} FFFrameList;
+	struct _st_FFVideoFrame *next;
+} FFVideoFrame;
+
+typedef struct _st_FFAudioFrame
+{
+	uint8_t *buffer;
+	int size;
+	struct _st_FFAudioFrame *next;
+} FFAudioFrame;
 
 typedef struct
 {
@@ -59,7 +63,8 @@ typedef struct
 	TFF_Cond cond;
 	size_t count;
 	size_t size;
-	FFFrameList *first, *last;
+	FFVideoFrame *firstV, *lastV;
+	FFAudioFrame *firstA, *lastA;
 } FFFrameQueue;
 
 typedef struct _st_FFSettings
@@ -81,10 +86,13 @@ typedef struct _st_FFSettings
 #define FF_FRAME_PIXFORMAT_YUV420 1
 #define FF_FRAME_PIXFORMAT_RGB32 2
 
+#define FF_AUDIO_SAMPLE_FMT_S16 0
+
 typedef struct _st_FFInitSetting
 {
 	wchar_t fileName[260];
 	int dstFramePixFmt;
+	int sampleFmt;
 } FFInitSetting;
 
 typedef struct _st_FFFrame
@@ -112,9 +120,16 @@ typedef struct _st_FFContext
 	int asIndex; //audio stream index
 	int handleVideo;
 	int handleAudio;
-	enum AVPixelFormat dstPixFmt;
-	int dstWidth;
-	int dstHeight;
+
+	//video settings
+	enum AVPixelFormat pixFmt;
+	int width;
+	int height;
+
+	//audio settings
+	int64_t channelLayout;
+	int freq;
+	enum AVSampleFormat sampleFmt;
 } FFContext;
 
 #define FF_OK								0

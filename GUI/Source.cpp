@@ -32,9 +32,11 @@ typedef struct _st_PlayContext
 {
 	SDL_Surface *window;
 	SDL_Overlay *overlay;
+	void *handle; //player handle
 } SDLPlayerContext;
 
 static SDLPlayerContext *_context;
+static FFFrame *_audioFrame;
 
 static int _beginTime;
 
@@ -80,6 +82,35 @@ void __stdcall Finished(void)
 
 void AudioCallback(void *userdata, Uint8 *stream, int len)
 {
+	SDLPlayerContext *context = (SDLPlayerContext *)userdata;
+	if(!_audioFrame)
+	{
+		_audioFrame = (FFFrame *)malloc(sizeof(FFFrame));
+		memset(_audioFrame, 0, sizeof(FFFrame));
+	}
+
+	int remainLen = len;
+	while(remainLen > 0)
+	{
+		if(_audioFrame->size > remainLen)
+		{
+			memcpy(stream, _audioFrame->buff, remainLen);
+			_audioFrame->buff += remainLen;
+			_audioFrame->size -= remainLen;
+			remainLen = 0;
+		}
+		else
+		{
+			memcpy(stream, _audioFrame->buff, _audioFrame->size);
+			remainLen -= _audioFrame->size;
+			FF_FreeAudioFrame(context->handle, _audioFrame);
+			if(FF_PopAudioFrame(context->handle, _audioFrame) < 0)
+			{
+				cout << "Audio get to the end." << endl;
+				break;
+			}
+		}
+	}
 }
 
 static int InitSDL(FFSettings *setting)
@@ -106,6 +137,7 @@ static int InitSDL(FFSettings *setting)
 		wantedSpec.silence = 0;
 		wantedSpec.samples = SDL_AUDIO_BUFFER_SIZE;
 		wantedSpec.callback = AudioCallback;
+		wantedSpec.userdata = _context;
 
 		SDL_AudioSpec spec;
 		SDL_OpenAudio(&wantedSpec, &spec);
@@ -184,13 +216,18 @@ int player(int argc, wchar_t *argv[])
 	if(err >= 0)
 	{
 		InitSDL(&settings);
+		_context->handle = handle;
 	}
 
 	_beginTime = SDL_GetTicks();
 	FF_Run(handle);
+	SDL_PauseAudio(0);
 
 	LoopEvents(&settings, handle);
 
+	SDL_CloseAudio();
+	if(_audioFrame)
+		free(_audioFrame);
 	if(err >= 0)
 	{
 		err = FF_CloseHandle(handle);
@@ -515,110 +552,14 @@ void play_sound_from_file(char *file)
 	fclose(f);
 }
 
-/*
- * Audio decoding.
- */
-static void audio_decode_example(const char *outfilename, const char *filename)
+static void test(AVRational r)
 {
-    AVCodec *codec;
-    AVCodecContext *c= NULL;
-    int len;
-    FILE *f, *outfile;
-    uint8_t inbuf[AUDIO_INBUF_SIZE + FF_INPUT_BUFFER_PADDING_SIZE];
-    AVPacket avpkt;
-    AVFrame *decoded_frame = NULL;
-
-	av_register_all();
-    av_init_packet(&avpkt);
-
-    printf("Decode audio file %s to %s\n", filename, outfilename);
-
-    /* find the mpeg audio decoder */
-    codec = avcodec_find_decoder(AV_CODEC_ID_MP3);
-    if (!codec) {
-        fprintf(stderr, "Codec not found\n");
-        exit(1);
-    }
-
-    c = avcodec_alloc_context3(codec);
-    if (!c) {
-        fprintf(stderr, "Could not allocate audio codec context\n");
-        exit(1);
-    }
-
-    /* open it */
-    if (avcodec_open2(c, codec, NULL) < 0) {
-        fprintf(stderr, "Could not open codec\n");
-        exit(1);
-    }
-
-    f = fopen(filename, "rb");
-    if (!f) {
-        fprintf(stderr, "Could not open %s\n", filename);
-        exit(1);
-    }
-    outfile = fopen(outfilename, "wb");
-    if (!outfile) {
-        av_free(c);
-        exit(1);
-    }
-
-    /* decode until eof */
-    avpkt.data = inbuf;
-    avpkt.size = fread(inbuf, 1, AUDIO_INBUF_SIZE, f);
-
-    while (avpkt.size > 0) {
-        int got_frame = 0;
-
-        if (!decoded_frame) {
-            if (!(decoded_frame = avcodec_alloc_frame())) {
-                fprintf(stderr, "Could not allocate audio frame\n");
-                exit(1);
-            }
-        } else
-            avcodec_get_frame_defaults(decoded_frame);
-
-        len = avcodec_decode_audio4(c, decoded_frame, &got_frame, &avpkt);
-        if (len < 0) {
-            fprintf(stderr, "Error while decoding\n");
-            continue;
-        }
-        if (got_frame) {
-            /* if a frame has been decoded, output it */
-            int data_size = av_samples_get_buffer_size(NULL, c->channels,
-                                                       decoded_frame->nb_samples,
-                                                       c->sample_fmt, 1);
-            fwrite(decoded_frame->data[0], 1, data_size, outfile);
-        }
-        avpkt.size -= len;
-        avpkt.data += len;
-        avpkt.dts =
-        avpkt.pts = AV_NOPTS_VALUE;
-        if (avpkt.size < AUDIO_REFILL_THRESH) {
-            /* Refill the input buffer, to avoid trying to decode
-             * incomplete frames. Instead of this, one could also use
-             * a parser, or use a proper container format through
-             * libavformat. */
-            memmove(inbuf, avpkt.data, avpkt.size);
-            avpkt.data = inbuf;
-            len = fread(avpkt.data + avpkt.size, 1,
-                        AUDIO_INBUF_SIZE - avpkt.size, f);
-            if (len > 0)
-                avpkt.size += len;
-        }
-    }
-
-    fclose(outfile);
-    fclose(f);
-
-    avcodec_close(c);
-    av_free(c);
-    avcodec_free_frame(&decoded_frame);
+	cout << r.den << r.num << endl;
 }
-
 int wmain(int argc, wchar_t *argv[])
 {
-	save_sound4("D:\\picandvideos\\20080528_p3_10.wmv", "D:\\audio\\audio.pcm");
-	play_sound_from_file("D:\\audio\\audio.pcm");
+	//save_sound4("D:\\picandvideos\\20080528_p3_10.wmv", "D:\\audio\\audio.pcm");
+	//play_sound_from_file("D:\\audio\\audio.pcm");
+	player(argc, argv);
 	return 0;
 }
