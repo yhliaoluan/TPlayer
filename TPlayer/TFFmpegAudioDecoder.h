@@ -4,34 +4,41 @@
 #include "TFFmpegDef.h"
 #include "TFFmpegPacketer.h"
 
+extern "C"
+{
+#include "libswresample\swresample.h"
+}
+
 class TFFmpegAudioDecoder
 {
 public:
 	TFFmpegAudioDecoder(FFContext *, TFFmpegPacketer *);
 	~TFFmpegAudioDecoder();
 
-	int Start();
-	int Init();
-	int FreeSingleFrame(FFAudioFrame **);
-	int Pop(FFAudioFrame **);
+	int Init(void);
+
+	//fill stream with length len
+	int Fill(uint8_t *stream, int len);
 private:
-	TFF_Thread _thread;
-	TFF_Mutex _readMutex;
-	TFF_Cond _readCond;
 	FFContext *_ctx;
 	TFFmpegPacketer *_pkter;
-	FFFrameQueue *_queue;
-	int _finished;
+	SwrContext *_swr;
+	int64_t _channelLayout;
+	int _sampleRate;
+	int _sampleFmt;
+	uint8_t *_buffer; // store the whole buff data
+	int _size; //buff data size
+	uint8_t *_curPtr;// current pointer of buff data
+	int _remainSize;
 
-#define AUDIO_DECODER_CMD_NONE 0x0000
-#define AUDIO_DECODER_CMD_EXIT  0x0001
-	int _cmd;
+	uint8_t *_outBuffer;
+	size_t _outSize;
 
-	void __stdcall ThreadStart();
-	static unsigned long __stdcall SThreadStart(void *);
-	int PutIntoQueue(uint8_t *buffer, int size);
-	int ClearFrameQueue();
-	int DestroyFrameQueue();
+	AVFrame *_decFrame;
+
+	int Decode();
+	void CheckBuffer(int newSize, int append);
+	void AllocCtxIfNeeded(const AVFrame *);
 };
 
 #endif

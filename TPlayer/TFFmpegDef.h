@@ -21,7 +21,7 @@ enum FFCmd
 
 typedef struct _st_FFPacketList
 {
-	AVPacket *pPkt;
+	AVPacket *pkt;
 	struct _st_FFPacketList *next;
 } FFPacketList;
 
@@ -42,7 +42,7 @@ typedef struct _st_FFSeekPosPkt
 
 typedef struct _st_FFVideoFrame
 {
-	AVFrame *pFrame;
+	AVFrame *frame;
 	uint8_t *buffer;
 	int width;
 	int height;
@@ -54,6 +54,8 @@ typedef struct _st_FFAudioFrame
 {
 	uint8_t *buffer;
 	int size;
+	int64_t pts;
+	int64_t duration; //in stream base unit
 	struct _st_FFAudioFrame *next;
 } FFAudioFrame;
 
@@ -101,9 +103,10 @@ typedef struct _st_FFFrame
 	int *linesize;
 	unsigned char *buff;
 	int keyFrame;
-	long long dts;
+	long long pts;
 	int size;
 	double time;
+	long long duration;//in ms
 	int width;
 	int height;
 } FFFrame;

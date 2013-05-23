@@ -12,5 +12,4 @@ FF_Run
 FF_Pause
 FF_Stop
 FF_SetResolution
-FF_PopAudioFrame
-FF_FreeAudioFrame
+FF_CopyAudioStream

@@ -36,30 +36,10 @@ typedef struct _st_PlayContext
 } SDLPlayerContext;
 
 static SDLPlayerContext *_context;
-static FFFrame *_audioFrame;
-
-static int _beginTime;
 
 void __stdcall NewFrame(FFFrame *p)
 {
 	SDL_Rect rect;
-
-	//if(!_context->overlay)
-	//	_context->overlay = SDL_CreateYUVOverlay(p->width, p->height, SDL_IYUV_OVERLAY, _context->window);
-
-	//if(_context->overlay->w != p->width ||
-	//	_context->overlay->h != p->height)
-	//{
-	//	SDL_FreeYUVOverlay(_context->overlay);
-	//	_context->overlay = SDL_CreateYUVOverlay(p->width, p->height, SDL_IYUV_OVERLAY, _context->window);
-	//}
-
-	int elMS = SDL_GetTicks() - _beginTime;
-	int showMS = (int)(p->time * 1000);
-	if(showMS > elMS)
-	{
-		SDL_Delay(showMS - elMS);
-	}
 
 	int err = SDL_LockYUVOverlay(_context->overlay);
 
@@ -83,34 +63,7 @@ void __stdcall Finished(void)
 void AudioCallback(void *userdata, Uint8 *stream, int len)
 {
 	SDLPlayerContext *context = (SDLPlayerContext *)userdata;
-	if(!_audioFrame)
-	{
-		_audioFrame = (FFFrame *)malloc(sizeof(FFFrame));
-		memset(_audioFrame, 0, sizeof(FFFrame));
-	}
-
-	int remainLen = len;
-	while(remainLen > 0)
-	{
-		if(_audioFrame->size > remainLen)
-		{
-			memcpy(stream, _audioFrame->buff, remainLen);
-			_audioFrame->buff += remainLen;
-			_audioFrame->size -= remainLen;
-			remainLen = 0;
-		}
-		else
-		{
-			memcpy(stream, _audioFrame->buff, _audioFrame->size);
-			remainLen -= _audioFrame->size;
-			FF_FreeAudioFrame(context->handle, _audioFrame);
-			if(FF_PopAudioFrame(context->handle, _audioFrame) < 0)
-			{
-				cout << "Audio get to the end." << endl;
-				break;
-			}
-		}
-	}
+	FF_CopyAudioStream(context->handle, stream, len);
 }
 
 static int InitSDL(FFSettings *setting)
@@ -219,15 +172,12 @@ int player(int argc, wchar_t *argv[])
 		_context->handle = handle;
 	}
 
-	_beginTime = SDL_GetTicks();
 	FF_Run(handle);
 	SDL_PauseAudio(0);
 
 	LoopEvents(&settings, handle);
 
 	SDL_CloseAudio();
-	if(_audioFrame)
-		free(_audioFrame);
 	if(err >= 0)
 	{
 		err = FF_CloseHandle(handle);

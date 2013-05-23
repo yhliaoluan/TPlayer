@@ -2,14 +2,15 @@
 #include "TFFmpegUtil.h"
 
 TFFmpegPlayer::TFFmpegPlayer() :
-	_pDecoder(NULL),
+	_videoDecoder(NULL),
 	_audioDecoder(NULL),
-	_pCtx(NULL),
-	_pPkter(NULL),
+	_ctx(NULL),
+	_pkter(NULL),
 	_cmd(Player_Cmd_None),
-	_hThread(NULL),
+	_thread(NULL),
 	_cmdMutex(NULL),
-	_cmdCond(NULL)
+	_cmdCond(NULL),
+	_clock(CLOCK_NO_VALUE)
 {
 }
 
@@ -22,20 +23,20 @@ void TFFmpegPlayer::Uninit()
 {
 	_cmd |= Player_Cmd_Exit;
 	TFF_CondBroadcast(_cmdCond);
-	if(_hThread)
+	if(_thread)
 	{
-		TFF_WaitThread(_hThread, 1000);
-		CloseThreadP(&_hThread);
+		TFF_WaitThread(_thread, 1000);
+		CloseThreadP(&_thread);
 	}
-	if(_pDecoder)
+	if(_videoDecoder)
 	{
-		delete _pDecoder;
-		_pDecoder = NULL;
+		delete _videoDecoder;
+		_videoDecoder = NULL;
 	}
-	if(_pPkter)
+	if(_pkter)
 	{
-		delete _pPkter;
-		_pPkter = NULL;
+		delete _pkter;
+		_pkter = NULL;
 	}
 	if(_audioDecoder)
 	{
@@ -54,13 +55,31 @@ unsigned long __stdcall TFFmpegPlayer::SThreadStart(void *p)
 	return 0;
 }
 
+int TFFmpegPlayer::Convert(FFVideoFrame *in, FFFrame *out)
+{
+	int ret = FF_OK;
+
+	out->data = in->frame->data;
+	out->buff = in->buffer;
+	out->linesize = in->frame->linesize;
+	out->size = in->size;
+	out->pts = in->frame->pts;
+	out->width = in->width;
+	out->height = in->height;
+	out->time = out->pts * av_q2d(_ctx->videoStream->time_base);
+	out->duration = (int64_t)(in->frame->pkt_duration * av_q2d(_ctx->videoStream->time_base) * 1000);
+
+	return ret;
+}
+
 void TFFmpegPlayer::ThreadStart()
 {
 	DebugOutput("TFFmpegPlayer::Thread thread start.");
 	int ret = 0;
 	BOOL holdMutex = FALSE;
 	FFFrame frame = {0};
-	FFVideoFrame *pFrame = NULL;
+	FFVideoFrame *videoFrame = NULL;
+	FFVideoFrame vf = {0};
 	while(1)
 	{
 		if(holdMutex)
@@ -90,28 +109,33 @@ void TFFmpegPlayer::ThreadStart()
 		{
 			DebugOutput("TFFmpegPlayer::Thread Player_Cmd_Seek");
 			_cmd &= ~Player_Cmd_Seek;
-			_pDecoder->SeekPos(_seekPos);
-			if(PopOneFrame(&frame, &pFrame) == FF_EOF)
+			int64_t pos = (int64_t)(_seekTime * AV_TIME_BASE);
+			AVRational timeBaseQ = {1, AV_TIME_BASE};
+			pos = av_rescale_q(pos, timeBaseQ, _ctx->videoStream->time_base);
+			//_videoDecoder->SeekPos(pos);
+			if(_videoDecoder->Decode(&vf) != FF_EOF)
 				DebugOutput("TFFmpegPlayer::Thread seek completed but cannot get a frame.");
 			else
 			{
+				Convert(&vf, &frame);
 				OnNewFrame(&frame);
-				_pDecoder->FreeSingleFrameList(&pFrame);
+				_videoDecoder->Free(&vf);
 			}
 		}
 		else if(_cmd & Player_Cmd_Step)
 		{
 			DebugOutput("TFFmpegPlayer::Thread Player_Cmd_Step");
 			_cmd &= ~Player_Cmd_Step;
-			if(PopOneFrame(&frame, &pFrame) != FF_EOF)
+			if(_videoDecoder->Decode(&vf) != FF_EOF)
 			{
+				Convert(&vf, &frame);
 				OnNewFrame(&frame);
-				_pDecoder->FreeSingleFrameList(&pFrame);
+				_videoDecoder->Free(&vf);
 			}
 		}
 		else if(_cmd & Player_Cmd_Run)
 		{
-			ret = PopOneFrame(&frame, &pFrame);
+			ret = _videoDecoder->Decode(&vf);
 			if(ret == FF_EOF)
 			{
 				DebugOutput("TFFmpegPlayer::Thread end of file. ");
@@ -120,8 +144,9 @@ void TFFmpegPlayer::ThreadStart()
 			}
 			else
 			{
+				Convert(&vf, &frame);
 				OnNewFrame(&frame);
-				_pDecoder->FreeSingleFrameList(&pFrame);
+				_videoDecoder->Free(&vf);
 			}
 		}
 		else
@@ -138,7 +163,7 @@ void TFFmpegPlayer::ThreadStart()
 
 int TFFmpegPlayer::GetVideoInfo(FFSettings *pSettings)
 {
-	AVStream *pVS = _pCtx->videoStream;
+	AVStream *pVS = _ctx->videoStream;
 	AVCodecContext *pVCodecCtx = pVS->codec;
 	AVRational frameRate = av_stream_get_r_frame_rate(pVS);
 	pSettings->width = pVCodecCtx->width;
@@ -149,9 +174,9 @@ int TFFmpegPlayer::GetVideoInfo(FFSettings *pSettings)
 	pSettings->timebaseDen = pVS->time_base.den;
 	pSettings->totalFrames = pVS->nb_frames;
 	pSettings->duration = pVS->duration;
-	if(_pCtx->audioStream)
+	if(_ctx->audioStream)
 	{
-		AVCodecContext *pACodecCtx = _pCtx->audioStream->codec;
+		AVCodecContext *pACodecCtx = _ctx->audioStream->codec;
 		pSettings->audioSampleRate = pACodecCtx->sample_rate;
 		pSettings->audioChannels = pACodecCtx->channels;
 	}
@@ -161,11 +186,11 @@ int TFFmpegPlayer::GetVideoInfo(FFSettings *pSettings)
 
 int TFFmpegPlayer::Start()
 {
-	_pPkter->Start();
-	_pDecoder->Start();
-	_audioDecoder->Start();
-	if(!_hThread)
-		_hThread = TFF_CreateThread(SThreadStart, this);
+	_pkter->Start();
+	//_videoDecoder->Start();
+	//_audioDecoder->Start();
+	if(!_thread)
+		_thread = TFF_CreateThread(SThreadStart, this);
 	return 0;
 }
 
@@ -176,19 +201,18 @@ int TFFmpegPlayer::Init(const FFInitSetting *pSetting)
 	_cmdCond = TFF_CreateCond();
 	if(ret >= 0)
 	{
-		_pPkter = new TFFmpegPacketer(_pCtx);
-		ret = _pPkter->Init();
+		_pkter = new TFFmpegPacketer(_ctx);
+		ret = _pkter->Init();
 	}
 	if(ret >= 0)
 	{
-		_pDecoder = new TFFmpegVideoDecoder(_pCtx, _pPkter);
-		ret = _pDecoder->Init();
-
+		_videoDecoder = new TFFmpegVideoDecoder(_ctx, _pkter);
+		ret = _videoDecoder->Init();
 	}
 
 	if(ret >= 0)
 	{
-		_audioDecoder = new TFFmpegAudioDecoder(_pCtx, _pPkter);
+		_audioDecoder = new TFFmpegAudioDecoder(_ctx, _pkter);
 		_audioDecoder->Init();
 		_cmd |= Player_Cmd_Stop;
 	}
@@ -201,17 +225,17 @@ int TFFmpegPlayer::Init(const FFInitSetting *pSetting)
 int TFFmpegPlayer::OpenAudioCodec()
 {
 	AVCodec *pCodec = NULL;
-	if(!_pCtx->audioStream)
+	if(!_ctx->audioStream)
 		return FF_NO_AUDIO_STREAM;
-	pCodec = avcodec_find_decoder(_pCtx->audioStream->codec->codec_id);
-	return avcodec_open2(_pCtx->audioStream->codec, pCodec, NULL);
+	pCodec = avcodec_find_decoder(_ctx->audioStream->codec->codec_id);
+	return avcodec_open2(_ctx->audioStream->codec, pCodec, NULL);
 }
 
 int TFFmpegPlayer::OpenVideoCodec()
 {
 	//open video codec context
-	AVCodec *pCodec = avcodec_find_decoder(_pCtx->videoStream->codec->codec_id);
-	return avcodec_open2(_pCtx->videoStream->codec, pCodec, NULL);
+	AVCodec *pCodec = avcodec_find_decoder(_ctx->videoStream->codec->codec_id);
+	return avcodec_open2(_ctx->videoStream->codec, pCodec, NULL);
 }
 
 int TFFmpegPlayer::InitCtx(const FFInitSetting *pSetting)
@@ -227,12 +251,12 @@ int TFFmpegPlayer::InitCtx(const FFInitSetting *pSetting)
 	}
 
 	FreeCtx();
-	_pCtx = (FFContext *)av_mallocz(sizeof(FFContext));
-	_pCtx->vsIndex = -1;
-	_pCtx->asIndex = -1;
-	_pCtx->handleAudio = 1;
-	_pCtx->handleVideo = 1;
-	_pCtx->pixFmt = FF_GetAVPixFmt(pSetting->dstFramePixFmt);
+	_ctx = (FFContext *)av_mallocz(sizeof(FFContext));
+	_ctx->vsIndex = -1;
+	_ctx->asIndex = -1;
+	_ctx->handleAudio = 1;
+	_ctx->handleVideo = 1;
+	_ctx->pixFmt = FF_GetAVPixFmt(pSetting->dstFramePixFmt);
 
 	WideCharToMultiByte(
 		CP_UTF8,
@@ -244,7 +268,7 @@ int TFFmpegPlayer::InitCtx(const FFInitSetting *pSetting)
 		NULL,
 		NULL);
 
-	ret = avformat_open_input(&_pCtx->pFmtCtx,
+	ret = avformat_open_input(&_ctx->pFmtCtx,
 		szFile, NULL, NULL);
 
 	if(ret < 0)
@@ -254,7 +278,7 @@ int TFFmpegPlayer::InitCtx(const FFInitSetting *pSetting)
 		return ret;
 	}
 
-	ret = avformat_find_stream_info(_pCtx->pFmtCtx, NULL);
+	ret = avformat_find_stream_info(_ctx->pFmtCtx, NULL);
 
 	if(ret < 0)
 	{
@@ -263,24 +287,24 @@ int TFFmpegPlayer::InitCtx(const FFInitSetting *pSetting)
 		return ret;
 	}
 
-	for(unsigned int i = 0; i < _pCtx->pFmtCtx->nb_streams; i++)
+	for(unsigned int i = 0; i < _ctx->pFmtCtx->nb_streams; i++)
 	{
-		if(_pCtx->pFmtCtx->streams[i]->codec->codec_type == AVMEDIA_TYPE_VIDEO &&
-			_pCtx->vsIndex < 0)
-			_pCtx->vsIndex = i;
-		else if(_pCtx->pFmtCtx->streams[i]->codec->codec_type == AVMEDIA_TYPE_AUDIO &&
-			_pCtx->asIndex < 0)
-			_pCtx->asIndex = i;
+		if(_ctx->pFmtCtx->streams[i]->codec->codec_type == AVMEDIA_TYPE_VIDEO &&
+			_ctx->vsIndex < 0)
+			_ctx->vsIndex = i;
+		else if(_ctx->pFmtCtx->streams[i]->codec->codec_type == AVMEDIA_TYPE_AUDIO &&
+			_ctx->asIndex < 0)
+			_ctx->asIndex = i;
 	}
 
-	if(_pCtx->vsIndex == -1)
+	if(_ctx->vsIndex == -1)
 	{
 		DebugOutput("Cannot find video stream.");
 		ret = FF_ERR_NO_VIDEO_STREAM;
 		return ret;
 	}
 	else
-		_pCtx->videoStream = _pCtx->pFmtCtx->streams[_pCtx->vsIndex];
+		_ctx->videoStream = _ctx->pFmtCtx->streams[_ctx->vsIndex];
 
 	ret = OpenVideoCodec();
 
@@ -291,10 +315,10 @@ int TFFmpegPlayer::InitCtx(const FFInitSetting *pSetting)
 		return ret;
 	}
 
-	if(_pCtx->asIndex == -1)
+	if(_ctx->asIndex == -1)
 		DebugOutput("Cannot find audio stream.");
 	else
-		_pCtx->audioStream = _pCtx->pFmtCtx->streams[_pCtx->asIndex];
+		_ctx->audioStream = _ctx->pFmtCtx->streams[_ctx->asIndex];
 
 	ret = OpenAudioCodec();
 	if(ret < 0)
@@ -305,18 +329,18 @@ int TFFmpegPlayer::InitCtx(const FFInitSetting *pSetting)
 	}
 
 	DebugOutput("Init stream successfully.");
-	DebugOutput("Width: %d Height: %d", _pCtx->videoStream->codec->width, _pCtx->videoStream->codec->height);
-	DebugOutput("Codec name: %s.", _pCtx->videoStream->codec->codec->long_name);
-	DebugOutput("Video stream index: %d", _pCtx->vsIndex);
-	DebugOutput("Audio stream index: %d", _pCtx->asIndex);
+	DebugOutput("Width: %d Height: %d", _ctx->videoStream->codec->width, _ctx->videoStream->codec->height);
+	DebugOutput("Codec name: %s.", _ctx->videoStream->codec->codec->long_name);
+	DebugOutput("Video stream index: %d", _ctx->vsIndex);
+	DebugOutput("Audio stream index: %d", _ctx->asIndex);
 
-	_pCtx->width = _pCtx->videoStream->codec->width;
-	_pCtx->height = _pCtx->videoStream->codec->height;
-	if(_pCtx->audioStream)
+	_ctx->width = _ctx->videoStream->codec->width;
+	_ctx->height = _ctx->videoStream->codec->height;
+	if(_ctx->audioStream)
 	{
-		_pCtx->channelLayout = av_get_default_channel_layout(_pCtx->audioStream->codec->channels);
-		_pCtx->sampleFmt = FF_GetAVSampleFmt(FF_AUDIO_SAMPLE_FMT_S16);
-		_pCtx->freq = _pCtx->audioStream->codec->sample_rate;
+		_ctx->channelLayout = av_get_default_channel_layout(_ctx->audioStream->codec->channels);
+		_ctx->sampleFmt = FF_GetAVSampleFmt(FF_AUDIO_SAMPLE_FMT_S16);
+		_ctx->freq = _ctx->audioStream->codec->sample_rate;
 	}
 	return ret;
 }
@@ -362,66 +386,19 @@ int TFFmpegPlayer::Stop()
 
 int TFFmpegPlayer::Seek(double time)
 {
-	_seekPos = (int64_t)(time * AV_TIME_BASE);
-	AVRational timeBaseQ = {1, AV_TIME_BASE};
-	_seekPos = av_rescale_q(_seekPos, timeBaseQ, _pCtx->videoStream->time_base);
+	_seekTime = time;
 	CmdAndSignal(Player_Cmd_Seek);
 	return 0;
 }
 
-int TFFmpegPlayer::FreeAudioFrame(FFFrame *frame)
+int TFFmpegPlayer::FillAudioStream(uint8_t *stream, int len)
 {
-	if(frame && frame->data)
-	{
-		av_free(frame->data[0]);
-		av_free(frame->data);
-		av_free(frame->linesize);
-	}
-	memset(frame, 0, sizeof(FFFrame));
-	return 0;
-}
-
-int TFFmpegPlayer::PopAudioFrame(FFFrame *frame)
-{
-	FFAudioFrame *audioFrame = NULL;
-	if(_audioDecoder->Pop(&audioFrame) < 0)
-	{
-		return FF_EOF;
-	}
-	frame->buff = audioFrame->buffer;
-	frame->data = (unsigned char **)av_malloc(sizeof(unsigned char *));
-	frame->data[0] = frame->buff;
-	frame->size = audioFrame->size;
-	frame->linesize = (int *)av_malloc(sizeof(int));
-	frame->linesize[0] = frame->size;
-	av_freep(&audioFrame);
-	return 0;
-}
-
-int TFFmpegPlayer::PopOneFrame(FFFrame *frame, FFVideoFrame **ppFrame)
-{
-	int ret = 0;
-	FFVideoFrame *pFrameList = NULL;
-	if((ret = _pDecoder->Pop(&pFrameList)) < 0)
-	{
-		*ppFrame = NULL;
-		return FF_EOF;
-	}
-	frame->data = pFrameList->pFrame->data;
-	frame->buff = pFrameList->buffer;
-	frame->linesize = pFrameList->pFrame->linesize;
-	frame->size = pFrameList->size;
-	frame->dts = pFrameList->pFrame->pkt_dts;
-	frame->width = pFrameList->width;
-	frame->height = pFrameList->height;
-	frame->time = frame->dts * av_q2d(_pCtx->videoStream->time_base);
-	*ppFrame = pFrameList;
-	return 0;
+	return _audioDecoder->Fill(stream, len);
 }
 
 int TFFmpegPlayer::SetResolution(int w, int h)
 {
-	_pDecoder->SetResolution(w, h);
+	_videoDecoder->SetResolution(w, h);
 	return 0;
 }
 
@@ -446,14 +423,14 @@ void TFFmpegPlayer::OnFinished(void)
 
 void TFFmpegPlayer::FreeCtx(void)
 {
-	if(_pCtx)
+	if(_ctx)
 	{
-		if(_pCtx->videoStream)
-			avcodec_close(_pCtx->videoStream->codec);
-		if(_pCtx->audioStream)
-			avcodec_close(_pCtx->audioStream->codec);
-		if(_pCtx->pFmtCtx)
-			avformat_close_input(&_pCtx->pFmtCtx);
-		av_freep(&_pCtx);
+		if(_ctx->videoStream)
+			avcodec_close(_ctx->videoStream->codec);
+		if(_ctx->audioStream)
+			avcodec_close(_ctx->audioStream->codec);
+		if(_ctx->pFmtCtx)
+			avformat_close_input(&_ctx->pFmtCtx);
+		av_freep(&_ctx);
 	}
 }

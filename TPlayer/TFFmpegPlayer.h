@@ -22,18 +22,20 @@ public:
 	int GetVideoInfo(FFSettings *);
 	int GetCurFrame();
 	int SetResolution(int w, int h);
-	int PopAudioFrame(FFFrame *);
-	int FreeAudioFrame(FFFrame *);
+	int FillAudioStream(uint8_t *stream, int len);
 private:
-	FFContext *_pCtx;
-	TFFmpegVideoDecoder *_pDecoder;
+	FFContext *_ctx;
+	TFFmpegVideoDecoder *_videoDecoder;
 	TFFmpegAudioDecoder *_audioDecoder;
-	TFFmpegPacketer *_pPkter;
-	TFF_Thread _hThread;
+	TFFmpegPacketer *_pkter;
+	TFF_Thread _thread;
 	NewFrameCB _fNewFrameCB;
 	FinishedCB _fFinishedCB;
 	TFF_Mutex _cmdMutex;
 	TFF_Cond _cmdCond;
+
+#define CLOCK_NO_VALUE -1
+	int64_t _clock;
 
 #define Player_Cmd_None 0x0000
 #define Player_Cmd_Run  0x0001
@@ -45,18 +47,18 @@ private:
 #define Player_Cmd_Pause 0x0040
 
 	int _cmd;
-	int64_t _seekPos;
+	double _seekTime;
 
 	static unsigned long __stdcall SThreadStart(void *);
 	void ThreadStart(void);
 	int InitCtx(const FFInitSetting *pSetting);
-	int PopOneFrame(OUT FFFrame *, FFVideoFrame **);
 	void OnNewFrame(IN FFFrame *);
 	void OnFinished(void);
 	void FreeCtx(void);
 	void Uninit(void);
 	int OpenVideoCodec(void);
 	int OpenAudioCodec(void);
+	int Convert(FFVideoFrame *, FFFrame *);
 	inline void CmdAndSignal(int);
 };
 #endif

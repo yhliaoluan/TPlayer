@@ -1,11 +1,8 @@
 #include "TFFmpegPacketer.h"
 #include "TFFmpegUtil.h"
 
-#define FF_MAX_PACKET_COUNT 50
-#define FF_MIN_PACKET_COUNT 5
-
-//32MB
-#define FF_MAX_PACKET_SIZE 0x02000000
+//16MB
+#define FF_MAX_PACKET_SIZE 0x01000000
 
 TFFmpegPacketer::TFFmpegPacketer(FFContext *p)
 	:_hThread(NULL),
@@ -139,18 +136,13 @@ void __stdcall TFFmpegPacketer::ThreadStart()
 		readRet = av_read_frame(_ctx->pFmtCtx, pPkt);
 		if(readRet >= 0)
 		{
-			DebugOutput("index:%d dts:%d pts:%d time:%f",
-				pPkt->stream_index,
-				(int)pPkt->dts,
-				(int)pPkt->pts,
-				(double)(pPkt->dts * av_q2d(_ctx->pFmtCtx->streams[pPkt->stream_index]->time_base)));
 			if(_ctx->handleVideo && pPkt->stream_index == _ctx->vsIndex)
 				PutIntoPktQueue(_videoQ, pPkt);
 			else if(_ctx->handleAudio && pPkt->stream_index == _ctx->asIndex)
 				PutIntoPktQueue(_audioQ, pPkt);
 			else
 			{
-				//DebugOutput("TFFmpegPacketer::Thread drop packet.\n");
+				DebugOutput("TFFmpegPacketer::Thread drop packet.\n");
 				av_free_packet(pPkt);
 				av_free(pPkt);
 			}
@@ -203,7 +195,7 @@ int TFFmpegPacketer::GetPacket(FFPacketQueue *q, FFPacketList **ppPkt)
 		FFPacketList *first = q->first;
 		q->first = q->first->next;
 		q->count--;
-		q->size -= first->pPkt->size;
+		q->size -= first->pkt->size;
 		*ppPkt = first;
 		if(q->count <= 1)
 			TFF_CondBroadcast(_readCond);
@@ -218,7 +210,7 @@ int TFFmpegPacketer::PutIntoPktQueue(
 {
 	TFF_GetMutex(q->mutex, TFF_INFINITE);
 	FFPacketList *pNew = (FFPacketList *)av_mallocz(sizeof(FFPacketList));
-	pNew->pPkt = pPkt;
+	pNew->pkt = pPkt;
 	if(q->count == 0)
 		q->first = q->last = pNew;
 	else
@@ -246,13 +238,13 @@ int TFFmpegPacketer::DestroyPktQueue(FFPacketQueue **ppq)
 
 int TFFmpegPacketer::ClearPktQueue(FFPacketQueue *q)
 {
-	FFPacketList *pCur = q->first;
-	FFPacketList *pNext = NULL;
-	while(pCur != NULL)
+	FFPacketList *cur = q->first;
+	FFPacketList *next = NULL;
+	while(cur != NULL)
 	{
-		pNext = pCur->next;
-		FreeSinglePktList(&pCur);
-		pCur = pNext;
+		next = cur->next;
+		FreeSinglePktList(&cur);
+		cur = next;
 	}
 	q->first = q->last = NULL;
 	q->count = 0;
@@ -262,13 +254,13 @@ int TFFmpegPacketer::ClearPktQueue(FFPacketQueue *q)
 
 int TFFmpegPacketer::FreeSinglePktList(FFPacketList **ppPktList)
 {
-	FFPacketList *pPktList = *ppPktList;
-	if(pPktList->pPkt != NULL)
+	FFPacketList *pkt = *ppPktList;
+	if(pkt->pkt != NULL)
 	{
-		av_free_packet(pPktList->pPkt);
-		av_free(pPktList->pPkt);
+		av_free_packet(pkt->pkt);
+		av_free(pkt->pkt);
 	}
-	av_free(pPktList);
+	av_free(pkt);
 	*ppPktList = NULL;
 	return 0;
 }
