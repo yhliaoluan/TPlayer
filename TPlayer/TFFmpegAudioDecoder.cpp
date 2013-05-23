@@ -9,7 +9,8 @@ TFFmpegAudioDecoder::TFFmpegAudioDecoder(FFContext *ctx, TFFmpegPacketer *pPkter
 	_curPtr(NULL),
 	_remainSize(0),
 	_outBuffer(NULL),
-	_outSize(0)
+	_outSize(0),
+	_dataSize(0)
 {
 	_ctx = ctx;
 	_pkter = pPkter;
@@ -39,6 +40,7 @@ int TFFmpegAudioDecoder::Fill(uint8_t *stream, int len)
 	{
 		if(_remainSize > remain)
 		{
+			//DebugOutput("remain size %d is greater than remain %d", _remainSize, remain);
 			memcpy(stream, _curPtr, remain);
 			_curPtr += remain;
 			_remainSize -= remain;
@@ -46,13 +48,23 @@ int TFFmpegAudioDecoder::Fill(uint8_t *stream, int len)
 		}
 		else
 		{
+			//DebugOutput("remain size %d is less than remain %d will decode", _remainSize, remain);
 			memcpy(stream, _curPtr, _remainSize);
 			remain -= _remainSize;
 			stream += _remainSize;
 			if(Decode() < 0)
+			{
 				memset(stream, 0, remain);
+				break;
+			}
+			else
+			{
+				_curPtr = _buffer;
+				_remainSize = _dataSize;
+			}
 		}
 	}
+	//DebugOutput("Leave Fill");
 	return ret;
 }
 
@@ -146,14 +158,18 @@ int TFFmpegAudioDecoder::Decode()
 							av_frame_get_channels(_decFrame),
 							samples,
 							(AVSampleFormat)_ctx->sampleFmt, 0);
-				curSize = _size;
 				CheckBuffer(dataSize, append);
+				//DebugOutput("samples %d dataSize: %d", samples, dataSize);
 				if(append)
 				{
-					memcpy(_buffer + _size, from, dataSize);
+					memcpy(_buffer + _dataSize, from, dataSize);
+					_dataSize += dataSize;
 				}
 				else
+				{
 					memcpy(_buffer, from, dataSize);
+					_dataSize = dataSize;
+				}
 				append = 1;
 			}
 			_pkter->FreeSinglePktList(&pkt);
@@ -173,24 +189,18 @@ void TFFmpegAudioDecoder::CheckBuffer(int newSize, int append)
 	{
 		_size = newSize;
 		_buffer = (uint8_t *)malloc(sizeof(uint8_t) * _size);
-		_curPtr = _buffer;
-		_remainSize = _size;
+		return;
 	}
-	else
+	if(!append && newSize > _size)
 	{
-		if(!append && newSize > _size)
-		{
-			_size = newSize;
-			_buffer = (uint8_t *)realloc(_buffer, sizeof(uint8_t) * _size);
-			_curPtr = _buffer;
-			_remainSize = _size;
-		}
-		if(append)
-		{
-			_size += newSize;
-			_buffer = (uint8_t *)realloc(_buffer, sizeof(uint8_t) * _size);
-			_curPtr = _buffer;
-			_remainSize = _size;
-		}
+		_size = newSize;
+		_buffer = (uint8_t *)realloc(_buffer, sizeof(uint8_t) * _size);
+		return;
+	}
+	if(append && (newSize + _dataSize) > _size)
+	{
+		_size = newSize + _dataSize;
+		_buffer = (uint8_t *)realloc(_buffer, sizeof(uint8_t) * _size);
+		return;
 	}
 }

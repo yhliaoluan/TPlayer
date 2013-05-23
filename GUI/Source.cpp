@@ -75,7 +75,7 @@ static int InitSDL(FFSettings *setting)
 	{
 		_context = (SDLPlayerContext *)malloc(sizeof(SDLPlayerContext));
 		memset(_context, 0, sizeof(SDLPlayerContext));
-		_context->window = SDL_SetVideoMode(setting->width, setting->height + CONTROL_HEIGHT, 0, SDL_SWSURFACE | SDL_RESIZABLE);
+		_context->window = SDL_SetVideoMode(setting->width, setting->height, 0, SDL_SWSURFACE/* | SDL_RESIZABLE*/);
 
 		_context->overlay = SDL_CreateYUVOverlay(setting->width, setting->height, SDL_IYUV_OVERLAY, _context->window);
 		SDL_WM_SetCaption("SDL Player", NULL);

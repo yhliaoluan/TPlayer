@@ -27,7 +27,8 @@ private:
 	int _sampleRate;
 	int _sampleFmt;
 	uint8_t *_buffer; // store the whole buff data
-	int _size; //buff data size
+	int _size; //buff size
+	int _dataSize;
 	uint8_t *_curPtr;// current pointer of buff data
 	int _remainSize;
 
