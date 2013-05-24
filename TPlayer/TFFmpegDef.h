@@ -35,11 +35,6 @@ typedef struct _st_FFPacketQueue
 	FFPacketList *first, *last;
 } FFPacketQueue;
 
-typedef struct _st_FFSeekPosPkt
-{
-	int64_t pos;
-} FFSeekPosPkt;
-
 typedef struct _st_FFVideoFrame
 {
 	AVFrame *frame;
@@ -56,32 +51,29 @@ typedef struct _st_FFAudioFrame
 	int size;
 	int64_t pts;
 	int64_t duration; //in stream base unit
-	struct _st_FFAudioFrame *next;
 } FFAudioFrame;
-
-typedef struct
-{
-	TFF_Mutex mutex;
-	TFF_Cond cond;
-	size_t count;
-	size_t size;
-	FFVideoFrame *firstV, *lastV;
-	FFAudioFrame *firstA, *lastA;
-} FFFrameQueue;
 
 typedef struct _st_FFSettings
 {
-	int width;
-	int height;
-	int fpsNum;
-	int fpsDen;
-	int timebaseNum;
-	int timebaseDen;
-	int audioSampleRate;
-	int audioChannels;
-	long long duration;
-	long long totalFrames;
-	char codecName[128];
+	struct
+	{
+		int valid;
+		int width;
+		int height;
+		int fpsNum;
+		int fpsDen;
+		int timebaseNum;
+		int timebaseDen;
+		long long duration;
+		long long totalFrames;
+		char codecName[128];
+	} v;
+	struct
+	{
+		int valid;
+		int sampleRate;
+		int channels;
+	} a;
 } FFSettings;
 
 #define FF_FRAME_PIXFORMAT_RGB24 0
@@ -93,7 +85,7 @@ typedef struct _st_FFSettings
 typedef struct _st_FFInitSetting
 {
 	wchar_t fileName[260];
-	int dstFramePixFmt;
+	int framePixFmt;
 	int sampleFmt;
 } FFInitSetting;
 

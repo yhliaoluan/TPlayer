@@ -19,6 +19,7 @@ public:
 
 	//fill stream with length len
 	int Fill(uint8_t *stream, int len);
+	int GetCurFrameInfo(int64_t *pts, int64_t *duration);
 private:
 	FFContext *_ctx;
 	TFFmpegPacketer *_pkter;
@@ -40,6 +41,7 @@ private:
 	int Decode();
 	void CheckBuffer(int newSize, int append);
 	void AllocCtxIfNeeded(const AVFrame *);
+	int CopyData(uint8_t *, int samples, int append);
 };
 
 #endif

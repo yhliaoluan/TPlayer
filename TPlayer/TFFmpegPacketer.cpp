@@ -122,15 +122,16 @@ void __stdcall TFFmpegPacketer::ThreadStart()
 	int readRet = 0;
 	while(1)
 	{
-		if(_cmd & PkterCmd_Exit)
-			break;
-
 		TFF_GetMutex(_readMutex, TFF_INFINITE);
 		while(_videoQ->size + _audioQ->size >= FF_MAX_PACKET_SIZE
 			&& !(_cmd & PkterCmd_Exit))
 		{
 			TFF_WaitCond(_readCond, _readMutex);
 		}
+
+		if(_cmd & PkterCmd_Exit)
+			break;
+
 		AVPacket *pPkt = (AVPacket *)av_mallocz(sizeof(AVPacket));
 		av_init_packet(pPkt);
 		readRet = av_read_frame(_ctx->pFmtCtx, pPkt);

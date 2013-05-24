@@ -22,6 +22,10 @@ TFFmpegAudioDecoder::~TFFmpegAudioDecoder()
 		free(_buffer);
 	if(_outBuffer)
 		av_free(_outBuffer);
+	if(_swr)
+		swr_free(&_swr);
+	if(_decFrame)
+		avcodec_free_frame(&_decFrame);
 }
 
 int TFFmpegAudioDecoder::Init(void)
@@ -32,6 +36,25 @@ int TFFmpegAudioDecoder::Init(void)
 	return 0;
 }
 
+int TFFmpegAudioDecoder::GetCurFrameInfo(int64_t *pts, int64_t *duration)
+{
+	int ret = FF_OK;
+	if(_decFrame)
+	{
+		*pts = av_frame_get_best_effort_timestamp(_decFrame);
+		if(duration)
+			*duration = av_frame_get_pkt_duration(_decFrame);
+	}
+	else
+	{
+		ret = FF_ERR_GENERAL;
+		*pts = AV_NOPTS_VALUE;
+		if(duration)
+			*duration = AV_NOPTS_VALUE;
+	}
+	return ret;
+}
+
 int TFFmpegAudioDecoder::Fill(uint8_t *stream, int len)
 {
 	int ret = FF_OK;
@@ -40,7 +63,6 @@ int TFFmpegAudioDecoder::Fill(uint8_t *stream, int len)
 	{
 		if(_remainSize > remain)
 		{
-			//DebugOutput("remain size %d is greater than remain %d", _remainSize, remain);
 			memcpy(stream, _curPtr, remain);
 			_curPtr += remain;
 			_remainSize -= remain;
@@ -48,13 +70,14 @@ int TFFmpegAudioDecoder::Fill(uint8_t *stream, int len)
 		}
 		else
 		{
-			//DebugOutput("remain size %d is less than remain %d will decode", _remainSize, remain);
 			memcpy(stream, _curPtr, _remainSize);
 			remain -= _remainSize;
 			stream += _remainSize;
 			if(Decode() < 0)
 			{
+				DebugOutput("Audio decoder go to the end of file.");
 				memset(stream, 0, remain);
+				ret = FF_EOF;
 				break;
 			}
 			else
@@ -64,7 +87,6 @@ int TFFmpegAudioDecoder::Fill(uint8_t *stream, int len)
 			}
 		}
 	}
-	//DebugOutput("Leave Fill");
 	return ret;
 }
 
@@ -101,7 +123,7 @@ int TFFmpegAudioDecoder::Decode()
 	int ret = FF_OK;
 	FFPacketList *pkt = NULL;
 	int gotFrame = 0;
-	int dataSize, curSize, samples;
+	int samples;
 	int append = 0;
 	uint8_t *from = NULL;
 	while(!gotFrame)
@@ -153,23 +175,7 @@ int TFFmpegAudioDecoder::Decode()
 					samples = _decFrame->nb_samples;
 					from = _decFrame->data[0];
 				}
-				dataSize = av_samples_get_buffer_size(
-							NULL,
-							av_frame_get_channels(_decFrame),
-							samples,
-							(AVSampleFormat)_ctx->sampleFmt, 0);
-				CheckBuffer(dataSize, append);
-				//DebugOutput("samples %d dataSize: %d", samples, dataSize);
-				if(append)
-				{
-					memcpy(_buffer + _dataSize, from, dataSize);
-					_dataSize += dataSize;
-				}
-				else
-				{
-					memcpy(_buffer, from, dataSize);
-					_dataSize = dataSize;
-				}
+				CopyData(from, samples, append);
 				append = 1;
 			}
 			_pkter->FreeSinglePktList(&pkt);
@@ -180,6 +186,30 @@ int TFFmpegAudioDecoder::Decode()
 			break;
 		}
 	}
+	return ret;
+}
+
+int TFFmpegAudioDecoder::CopyData(uint8_t *from, int samples, int append)
+{
+	int ret = FF_OK;
+
+	int dataSize = av_samples_get_buffer_size(
+					NULL,
+					av_frame_get_channels(_decFrame),
+					samples,
+					(AVSampleFormat)_ctx->sampleFmt, 0);
+	CheckBuffer(dataSize, append);
+	if(append)
+	{
+		memcpy(_buffer + _dataSize, from, dataSize);
+		_dataSize += dataSize;
+	}
+	else
+	{
+		memcpy(_buffer, from, dataSize);
+		_dataSize = dataSize;
+	}
+
 	return ret;
 }
 

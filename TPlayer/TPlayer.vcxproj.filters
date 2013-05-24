@@ -36,6 +36,9 @@
     <ClCompile Include="TFFmpegAudioDecoder.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="TFFmpegClock.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="TFFmpeg.h">
@@ -63,6 +66,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="TFFmpegAudioDecoder.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="TFFmpegClock.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

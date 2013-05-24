@@ -5,6 +5,7 @@
 #include "TFFmpegVideoDecoder.h"
 #include "TFFmpegPacketer.h"
 #include "TFFmpegAudioDecoder.h"
+#include "TFFmpegClock.h"
 
 class TFFmpegPlayer
 {
@@ -33,9 +34,8 @@ private:
 	FinishedCB _fFinishedCB;
 	TFF_Mutex _cmdMutex;
 	TFF_Cond _cmdCond;
-
-#define CLOCK_NO_VALUE -1
-	int64_t _clock;
+	double _seekTime;
+	TFFmpegClock _clock;
 
 #define Player_Cmd_None 0x0000
 #define Player_Cmd_Run  0x0001
@@ -45,20 +45,22 @@ private:
 #define Player_Cmd_Stop 0x0010
 #define Player_Cmd_Get  0x0020
 #define Player_Cmd_Pause 0x0040
-
 	int _cmd;
-	double _seekTime;
+
+	enum { TFF_PLAYTYPE_VIDEO = 0x0001, TFF_PLAYTYPE_AUDIO = 0x0002 };
+	int _finishedType;
 
 	static unsigned long __stdcall SThreadStart(void *);
 	void ThreadStart(void);
 	int InitCtx(const FFInitSetting *pSetting);
-	void OnNewFrame(IN FFFrame *);
-	void OnFinished(void);
+	inline void OnNewFrame(IN FFFrame *);
+	void OnFinished(int type);
 	void FreeCtx(void);
 	void Uninit(void);
 	int OpenVideoCodec(void);
 	int OpenAudioCodec(void);
-	int Convert(FFVideoFrame *, FFFrame *);
+	inline int Convert(FFVideoFrame *, FFFrame *);
+	inline void SyncVideo(FFFrame *);
 	inline void CmdAndSignal(int);
 };
 #endif

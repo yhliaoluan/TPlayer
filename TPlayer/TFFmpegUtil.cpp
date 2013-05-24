@@ -10,6 +10,7 @@ DebugOutput(const char *msg, ...)
 	va_start(vl, msg);
 	vsprintf_s(m, msg, vl);
 	TFF_OutputDebugString(m);
+	//vprintf(msg, vl);
 	va_end(vl);
 #endif
 }

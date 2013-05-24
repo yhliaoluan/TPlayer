@@ -95,7 +95,6 @@ int TFFmpegVideoDecoder::Decode(FFVideoFrame *frame)
 					_decFrame->height,
 					frame->frame->data,
 					frame->frame->linesize);
-
 				frame->frame->pts = av_frame_get_best_effort_timestamp(_decFrame);
 				frame->frame->pkt_duration = av_frame_get_pkt_duration(_decFrame);
 			}
