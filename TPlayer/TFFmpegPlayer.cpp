@@ -10,7 +10,9 @@ TFFmpegPlayer::TFFmpegPlayer() :
 	_thread(NULL),
 	_cmdMutex(NULL),
 	_cmdCond(NULL),
-	_finishedType(0)
+	_finishedType(0),
+	_audioWait(1),
+	_flushMutex(NULL)
 {
 }
 
@@ -43,8 +45,9 @@ void TFFmpegPlayer::Uninit()
 		delete _pkter;
 		_pkter = NULL;
 	}
-	TFF_DestroyCond(&_cmdCond);
+	TFF_CondDestroy(&_cmdCond);
 	CloseMutexP(&_cmdMutex);
+	CloseMutexP(&_flushMutex);
 	FreeCtx();
 }
 
@@ -109,18 +112,13 @@ void TFFmpegPlayer::ThreadStart()
 		{
 			DebugOutput("TFFmpegPlayer::Thread Player_Cmd_Seek");
 			_cmd &= ~Player_Cmd_Seek;
-			int64_t pos = (int64_t)(_seekTime * AV_TIME_BASE);
-			AVRational timeBaseQ = {1, AV_TIME_BASE};
-			pos = av_rescale_q(pos, timeBaseQ, _ctx->videoStream->time_base);
-			//_videoDecoder->SeekPos(pos);
-			if(_videoDecoder->Decode(&vf) != FF_EOF)
-				DebugOutput("TFFmpegPlayer::Thread seek completed but cannot get a frame.");
-			else
-			{
-				Convert(&vf, &frame);
-				OnNewFrame(&frame);
-				_videoDecoder->Free(&vf);
-			}
+			TFF_GetMutex(_flushMutex, TFF_INFINITE);
+			_pkter->SeekPos(_seekTime);
+			if(_ctx->videoStream)
+				avcodec_flush_buffers(_ctx->videoStream->codec);
+			if(_ctx->audioStream)
+				avcodec_flush_buffers(_ctx->audioStream->codec);
+			TFF_ReleaseMutex(_flushMutex);
 		}
 		else if(_cmd & Player_Cmd_Step)
 		{
@@ -160,7 +158,7 @@ void TFFmpegPlayer::ThreadStart()
 		}
 		else
 		{
-			TFF_WaitCond(_cmdCond, _cmdMutex);
+			TFF_CondWait(_cmdCond, _cmdMutex);
 			holdMutex = TRUE;
 		}
 
@@ -223,8 +221,9 @@ int TFFmpegPlayer::Start()
 int TFFmpegPlayer::Init(const FFInitSetting *pSetting)
 {
 	int ret = InitCtx(pSetting);
+	_flushMutex = TFF_CreateMutex();
 	_cmdMutex = TFF_CreateMutex();
-	_cmdCond = TFF_CreateCond();
+	_cmdCond = TFF_CondCreate();
 	if(ret >= 0)
 	{
 		_pkter = new TFFmpegPacketer(_ctx);
@@ -261,7 +260,7 @@ int TFFmpegPlayer::OpenAudioCodec()
 int TFFmpegPlayer::OpenVideoCodec()
 {
 	if(!_ctx->videoStream)
-		return FF_OK;
+		return FF_NO_VIDEO_STREAM;
 	//open video codec context
 	AVCodec *pCodec = avcodec_find_decoder(_ctx->videoStream->codec->codec_id);
 	return avcodec_open2(_ctx->videoStream->codec, pCodec, NULL);
@@ -318,17 +317,10 @@ int TFFmpegPlayer::InitCtx(const FFInitSetting *pSetting)
 
 	av_dump_format(_ctx->pFmtCtx, 0, szFile, 0);
 
-	for(unsigned int i = 0; i < _ctx->pFmtCtx->nb_streams; i++)
-	{
-		if(_ctx->pFmtCtx->streams[i]->codec->codec_type == AVMEDIA_TYPE_VIDEO &&
-			_ctx->vsIndex < 0)
-			_ctx->vsIndex = i;
-		else if(_ctx->pFmtCtx->streams[i]->codec->codec_type == AVMEDIA_TYPE_AUDIO &&
-			_ctx->asIndex < 0)
-			_ctx->asIndex = i;
-	}
+	_ctx->vsIndex = av_find_best_stream(_ctx->pFmtCtx, AVMEDIA_TYPE_VIDEO, _ctx->vsIndex, -1,
+		NULL, 0);
 
-	if(_ctx->vsIndex == -1)
+	if(_ctx->vsIndex < 0)
 	{
 		DebugOutput("Cannot find video stream.");
 	}
@@ -344,7 +336,10 @@ int TFFmpegPlayer::InitCtx(const FFInitSetting *pSetting)
 		}
 	}
 
-	if(_ctx->asIndex == -1)
+	_ctx->asIndex = av_find_best_stream(_ctx->pFmtCtx, AVMEDIA_TYPE_AUDIO, _ctx->asIndex,
+		_ctx->vsIndex, NULL, 0);
+
+	if(_ctx->asIndex < 0)
 		DebugOutput("Cannot find audio stream.");
 	else
 	{
@@ -376,9 +371,11 @@ int TFFmpegPlayer::InitCtx(const FFInitSetting *pSetting)
 		_ctx->sampleFmt = FF_GetAVSampleFmt(FF_AUDIO_SAMPLE_FMT_S16);
 		_ctx->freq = _ctx->audioStream->codec->sample_rate;
 		DebugOutput("Sample rate: %d MHz", _ctx->freq);
+		DebugOutput("Stream time base %d/%d", _ctx->audioStream->time_base.num, _ctx->audioStream->time_base.den);
 		char channelStr[MAX_PATH] = {0};
 		av_get_channel_layout_string(channelStr, MAX_PATH, _ctx->audioStream->codec->channels, _ctx->channelLayout);
-		DebugOutput("Channels: %s", channelStr);
+		DebugOutput("Channles: %d", _ctx->audioStream->codec->channels);
+		DebugOutput("Channel layout: %s", channelStr);
 		DebugOutput("Codec name :%s", _ctx->audioStream->codec->codec->long_name);
 	}
 
@@ -434,23 +431,23 @@ int TFFmpegPlayer::Seek(double time)
 int TFFmpegPlayer::FillAudioStream(uint8_t *stream, int len)
 {
 	int ret = FF_OK;
-	static int first = 1;
-	if((ret = _audioDecoder->Fill(stream, len)) >= 0 && ret != FF_EOF)
+	int64_t pts;
+	TFF_GetMutex(_flushMutex, TFF_INFINITE);
+	if((ret = _audioDecoder->Fill(stream, len, &pts)) >= 0 && ret != FF_EOF)
 	{
-		int64_t pts;
-		if(_audioDecoder->GetCurFrameInfo(&pts, NULL) >= 0)
+		long ms = (long)(pts * 1000 * av_q2d(_ctx->audioStream->time_base));
+		if(_audioWait)
 		{
-			long ms = (long)(pts * 1000 * av_q2d(_ctx->audioStream->time_base));
-			if(first)
+			long sleepMS = ms - _clock.GetTime();
+			if(sleepMS > 0)
 			{
-				long sleepMS = ms - _clock.GetTime();
-				if(sleepMS > 0)
-					TFF_Sleep(sleepMS);
-				first = 0;
+				DebugOutput("Audio will start in %d ms.", sleepMS);
+				TFF_Sleep(sleepMS);
 			}
-			else
-				_clock.Sync(ms);
+			_audioWait = 0;
 		}
+		else
+			_clock.Sync(ms);
 	}
 	else if(ret == FF_EOF)
 	{
@@ -458,6 +455,7 @@ int TFFmpegPlayer::FillAudioStream(uint8_t *stream, int len)
 		OnFinished(TFF_PLAYTYPE_AUDIO);
 		TFF_ReleaseMutex(_cmdMutex);
 	}
+	TFF_ReleaseMutex(_flushMutex);
 	return ret;
 }
 

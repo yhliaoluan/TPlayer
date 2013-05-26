@@ -62,15 +62,15 @@ typedef struct _st_TFF_Cond_Win32
 #define TFF_Cond PTFF_Cond_Win32
 
 TFF_Cond TFF_CreateCondWin32();
-#define TFF_CreateCond TFF_CreateCondWin32
+#define TFF_CondCreate TFF_CreateCondWin32
 
 int TFF_DestroyCondWin32(TFF_Cond *cv);
-#define TFF_DestroyCond TFF_DestroyCondWin32
+#define TFF_CondDestroy TFF_DestroyCondWin32
 
 int TFF_WaitCondWin32(TFF_Cond cv, TFF_Mutex mutex);
-#define TFF_WaitCond TFF_WaitCondWin32
+#define TFF_CondWait TFF_WaitCondWin32
 
-int TFF_CondBroadcastWin32(TFF_Cond cv);
-#define TFF_CondBroadcast TFF_CondBroadcastWin32
+int TFF_BroadcastCondWin32(TFF_Cond cv);
+#define TFF_CondBroadcast TFF_BroadcastCondWin32
 
 #endif

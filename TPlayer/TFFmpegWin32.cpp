@@ -45,7 +45,7 @@ int TFF_WaitCondWin32(TFF_Cond cv, TFF_Mutex mutex)
 	return 0;
 }
 
-int TFF_CondBroadcastWin32(TFF_Cond cv)
+int TFF_BroadcastCondWin32(TFF_Cond cv)
 {
 	EnterCriticalSection(&cv->waitersLock);
 	if(cv->waitersCount > 0)

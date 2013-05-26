@@ -39,6 +39,9 @@
     <ClCompile Include="TFFmpegClock.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="TFFmpegSubtitleDecoder.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="TFFmpeg.h">
@@ -69,6 +72,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="TFFmpegClock.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="TFFmpegSubtitleDecoder.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

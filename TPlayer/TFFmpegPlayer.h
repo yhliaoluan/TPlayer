@@ -33,9 +33,12 @@ private:
 	NewFrameCB _fNewFrameCB;
 	FinishedCB _fFinishedCB;
 	TFF_Mutex _cmdMutex;
+	TFF_Mutex _flushMutex;
 	TFF_Cond _cmdCond;
 	double _seekTime;
 	TFFmpegClock _clock;
+
+	int _audioWait;
 
 #define Player_Cmd_None 0x0000
 #define Player_Cmd_Run  0x0001

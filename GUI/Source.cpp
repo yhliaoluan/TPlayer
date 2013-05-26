@@ -110,19 +110,21 @@ static void LoopEvents(FFSettings *pSettings, void *handle)
 				running = FALSE;
 				break;
 			case SDL_VIDEORESIZE:
-				//w = event.resize.w;
-				//h = event.resize.h;
-				//r = w / (double)h;
-				//if(r > srcR)
-				//	w = (int)(h * srcR + 0.5);
-				//else if(r < srcR)
-				//	h = (int)(w / srcR + 0.5);
-				//if(w % 2 != 0)
-				//	w -= 1;
-				//if(h % 2 != 0)
-				//	h -= 1;
-				//cout << "Resize w:" << w << " h:" << h << endl;
-				//FF_SetResolution(handle, w, h);
+				/*w = event.resize.w;
+				h = event.resize.h;
+				r = w / (double)h;
+				if(r > srcR)
+					w = (int)(h * srcR + 0.5);
+				else if(r < srcR)
+					h = (int)(w / srcR + 0.5);
+				if(w % 2 != 0)
+					w -= 1;
+				if(h % 2 != 0)
+					h -= 1;
+				cout << "Resize w:" << w << " h:" << h << endl;
+				FF_SetResolution(handle, w, h);*/
+				break;
+			case SDL_KEYDOWN:
 				break;
 			default:
 				break;
@@ -194,8 +196,120 @@ int player(int argc, wchar_t *argv[])
 	return 0;
 }
 
+int testDecodeSubtitle(wchar_t *file)
+{
+	AVFormatContext *ctx = NULL;
+	char szFile[MAX_PATH] = {0};
+	int i, subtitleIndex, err, gotSubtitle;
+	AVSubtitle subtitle;
+	wchar_t info[1024] = {0};
+	av_register_all();
+
+	WideCharToMultiByte(CP_UTF8, 0, file, -1, szFile, MAX_PATH, NULL, NULL);
+
+	avformat_open_input(&ctx, szFile, NULL, NULL);
+
+	av_find_stream_info(ctx);
+
+	av_dump_format(ctx, 0, szFile, 0);
+
+	subtitleIndex = av_find_best_stream(ctx, AVMEDIA_TYPE_SUBTITLE, -1, -1, NULL, 0);
+
+	if(subtitleIndex < 0)
+	{
+		cout << "There is no subtitle stream." << endl;
+		return -1;
+	}
+
+	AVStream *stream = ctx->streams[subtitleIndex];
+	AVCodec *decoder = avcodec_find_decoder(stream->codec->codec_id);
+	err = avcodec_open2(stream->codec, decoder, NULL);
+
+	if(err < 0)
+	{
+		cout << "err when open decoder." << endl;
+		return err;
+	}
+
+	AVPacket pkt;
+	av_init_packet(&pkt);
+	while(av_read_frame(ctx, &pkt) >= 0)
+	{
+		if(pkt.stream_index == subtitleIndex)
+		{
+			int len = avcodec_decode_subtitle2(stream->codec, &subtitle, &gotSubtitle, &pkt);
+			if(len < 0)
+			{
+				cout << "err when decode subtitle" << endl;
+				continue;
+			}
+
+			if(gotSubtitle)
+			{
+				char *ass = subtitle.rects[0]->ass;
+				MultiByteToWideChar(CP_UTF8, 0, ass, -1, info, 1024);
+			}
+		}
+		av_free_packet(&pkt);
+	}
+	avsubtitle_free(&subtitle);
+
+	return 0;
+}
+
+void SDLTest()
+{
+	int ret, quit;
+	SDL_Surface *screen, *bmp;
+	SDL_Event event;
+	ret = SDL_Init(SDL_INIT_EVERYTHING);
+	int width, height;
+	width = height = 400;
+
+	screen = SDL_SetVideoMode(width, height, 0, SDL_SWSURFACE);
+
+	SDL_Rect rect;
+	rect.x = 100;
+	rect.y = 100;
+	bmp = SDL_LoadBMP("D:\\Picture\\test.bmp");
+
+	SDL_BlitSurface(bmp, NULL, screen, &rect);
+
+	SDL_Flip(screen);
+
+	quit = 0;
+	while(!quit)
+	{
+		SDL_Delay(50);
+		while(SDL_PollEvent(&event))
+		{
+			switch(event.type)
+			{
+			case SDL_QUIT:
+				quit = 1;
+				break;
+			case SDL_KEYDOWN:
+				switch(event.key.keysym.sym)
+				{
+				case SDLK_RETURN:
+					screen = SDL_SetVideoMode(width, height, 0, SDL_SWSURFACE |
+						 SDL_FULLSCREEN);
+					break;
+				case SDLK_ESCAPE:
+					screen = SDL_SetVideoMode(width, height, 0, SDL_SWSURFACE);
+					break;
+				}
+				break;
+			default:
+				break;
+			}
+		}
+	}
+}
+
 int wmain(int argc, wchar_t *argv[])
 {
-	player(argc, argv);
+	//player(argc, argv);
+	SDLTest();
 	return 0;
 }

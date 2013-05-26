@@ -9,19 +9,19 @@ public:
 	TFFmpegPacketer(FFContext *);
 	virtual ~TFFmpegPacketer();
 	int Start();
-	int GetVideoPacket(FFPacketList **ppPkt);
-	int GetVideoPacketCount();
-	int GetAudioPacket(FFPacketList **ppPkt);
-	int FreeSinglePktList(FFPacketList **ppPkt);
+	int GetVideoPacket(FFPacketList **pkt);
+	int GetAudioPacket(FFPacketList **pkt);
+	int GetSubtitlePacket(FFPacketList **pkt);
+	int FreeSinglePktList(FFPacketList **pkt);
 	int Init();
-	int SeekPos(int64_t pos);
-	BOOL IsFinished();
+	int SeekPos(double);
 private:
-	TFF_Thread _hThread;
+	TFF_Thread _thread;
 	TFF_Cond _readCond;
 	TFF_Mutex _readMutex;
 	FFPacketQueue *_videoQ;
 	FFPacketQueue *_audioQ;
+	FFPacketQueue *_subtitleQ;
 	FFContext *_ctx;
 	BOOL _isFinished;
 
@@ -36,9 +36,8 @@ private:
 	//put 
 	int PutIntoPktQueue(
 		FFPacketQueue *q,
-		AVPacket *pPkt);
-	int GetPacket(FFPacketQueue *q, FFPacketList **ppPkt);
-	int GetPacketCount(FFPacketQueue *q);
+		AVPacket *pkt);
+	int GetPacket(FFPacketQueue *, FFPacketList **);
 	int ClearPktQueue(FFPacketQueue *q);
 	int DestroyPktQueue(FFPacketQueue **);
 	int InitPacketQueue(FFPacketQueue **, int type);

@@ -113,6 +113,7 @@ typedef struct _st_FFContext
 	AVStream *audioStream;
 	int vsIndex; //video stream index
 	int asIndex; //audio stream index
+	int ssIndex; //subtitle stream index
 	int handleVideo;
 	int handleAudio;
 
@@ -130,6 +131,7 @@ typedef struct _st_FFContext
 #define FF_OK								0
 #define FF_EOF								2
 #define FF_NO_AUDIO_STREAM					3
+#define FF_NO_VIDEO_STREAM					4
 
 //co ffmpeg errors
 #define FF_ERR_GENERAL						-100

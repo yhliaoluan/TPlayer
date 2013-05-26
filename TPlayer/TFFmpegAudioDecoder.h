@@ -18,8 +18,7 @@ public:
 	int Init(void);
 
 	//fill stream with length len
-	int Fill(uint8_t *stream, int len);
-	int GetCurFrameInfo(int64_t *pts, int64_t *duration);
+	int Fill(uint8_t *stream, int len, int64_t *pts);
 private:
 	FFContext *_ctx;
 	TFFmpegPacketer *_pkter;
@@ -27,21 +26,25 @@ private:
 	int64_t _channelLayout;
 	int _sampleRate;
 	int _sampleFmt;
-	uint8_t *_buffer; // store the whole buff data
-	int _size; //buff size
-	int _dataSize;
-	uint8_t *_curPtr;// current pointer of buff data
-	int _remainSize;
 
 	uint8_t *_outBuffer;
 	size_t _outSize;
 
+	struct TFFAudioFrameList {
+		uint8_t *buffer;
+		int size;
+		uint8_t *curPtr;
+		int remainSize;
+		int64_t pts;
+		struct TFFAudioFrameList *next;
+	} *_rawFrames;
+
 	AVFrame *_decFrame;
 
 	int Decode();
-	void CheckBuffer(int newSize, int append);
+	void CheckBuffer(int newSize);
 	void AllocCtxIfNeeded(const AVFrame *);
-	int CopyData(uint8_t *, int samples, int append);
+	int CopyData(AVFrame *frame);
 };
 
 #endif

@@ -94,6 +94,7 @@
     <ClCompile Include="TFFmpeg.cpp" />
     <ClCompile Include="TFFmpegAudioDecoder.cpp" />
     <ClCompile Include="TFFmpegClock.cpp" />
+    <ClCompile Include="TFFmpegSubtitleDecoder.cpp" />
     <ClCompile Include="TFFmpegVideoDecoder.cpp" />
     <ClCompile Include="TFFmpegPacketer.cpp" />
     <ClCompile Include="TFFmpegPlayer.cpp" />
@@ -107,6 +108,7 @@
     <ClInclude Include="TFFmpeg.h" />
     <ClInclude Include="TFFmpegAudioDecoder.h" />
     <ClInclude Include="TFFmpegClock.h" />
+    <ClInclude Include="TFFmpegSubtitleDecoder.h" />
     <ClInclude Include="TFFmpegVideoDecoder.h" />
     <ClInclude Include="TFFmpegDef.h" />
     <ClInclude Include="TFFmpegPacketer.h" />
