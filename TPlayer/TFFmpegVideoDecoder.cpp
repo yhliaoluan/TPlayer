@@ -21,31 +21,52 @@ TFFmpegVideoDecoder::~TFFmpegVideoDecoder()
 
 int TFFmpegVideoDecoder::Init()
 {
-	_swsCtx = sws_getCachedContext(
-		NULL,
-		_ctx->videoStream->codec->width,
-		_ctx->videoStream->codec->height,
-        _ctx->videoStream->codec->pix_fmt,
-        _ctx->width,
-		_ctx->height,
-		_ctx->pixFmt,
-        SWS_FAST_BILINEAR, NULL, NULL, NULL);
+	AllocSwrContextIfNeeded();
 	return 0;
+}
+
+void TFFmpegVideoDecoder::AllocSwrContextIfNeeded()
+{
+	if(_ctx->videoStream->codec->width != _ctx->width ||
+		_ctx->videoStream->codec->height != _ctx->height ||
+		_ctx->videoStream->codec->pix_fmt != _ctx->pixFmt)
+	{
+		_swsCtx = sws_getCachedContext(
+			_swsCtx,
+			_ctx->videoStream->codec->width,
+			_ctx->videoStream->codec->height,
+			_ctx->videoStream->codec->pix_fmt,
+			_ctx->width,
+			_ctx->height,
+			_ctx->pixFmt,
+			SWS_FAST_BILINEAR, NULL, NULL, NULL);
+	}
 }
 
 int TFFmpegVideoDecoder::SetResolution(int width, int height)
 {
 	_ctx->width = width;
 	_ctx->height = height;
-	_swsCtx = sws_getCachedContext(
-		_swsCtx,
-		_ctx->videoStream->codec->width,
-		_ctx->videoStream->codec->height,
-        _ctx->videoStream->codec->pix_fmt,
-        _ctx->width,
-		_ctx->height,
-		_ctx->pixFmt,
-        SWS_FAST_BILINEAR, NULL, NULL, NULL);
+
+	if(_ctx->videoStream->codec->width != _ctx->width ||
+		_ctx->videoStream->codec->height != _ctx->height ||
+		_ctx->videoStream->codec->pix_fmt != _ctx->pixFmt)
+	{
+		_swsCtx = sws_getCachedContext(
+			_swsCtx,
+			_ctx->videoStream->codec->width,
+			_ctx->videoStream->codec->height,
+			_ctx->videoStream->codec->pix_fmt,
+			_ctx->width,
+			_ctx->height,
+			_ctx->pixFmt,
+			SWS_FAST_BILINEAR, NULL, NULL, NULL);
+	}
+	else if(!_swsCtx)
+	{
+		sws_freeContext(_swsCtx);
+		_swsCtx = NULL;
+	}
 	return 0;
 }
 
@@ -83,14 +104,24 @@ int TFFmpegVideoDecoder::Decode(FFVideoFrame *frame)
 					_ctx->pixFmt,
 					_ctx->width,
 					_ctx->height);
-				sws_scale(_swsCtx,
-					_decFrame->data,
-					_decFrame->linesize,
-					0,
-					_decFrame->height,
-					frame->frame->data,
-					frame->frame->linesize);
 
+				if(_swsCtx)
+				{
+					sws_scale(_swsCtx,
+						_decFrame->data,
+						_decFrame->linesize,
+						0,
+						_decFrame->height,
+						frame->frame->data,
+						frame->frame->linesize);
+				}
+				else
+				{
+					for(int i = 0; i < 4; i++)
+					{
+						memcpy(frame->frame->data[i], _decFrame->data[i], _decFrame->linesize[i]);
+					}
+				}
 				frame->width = _ctx->width;
 				frame->height = _ctx->height;
 				frame->frame->pts = av_frame_get_best_effort_timestamp(_decFrame);

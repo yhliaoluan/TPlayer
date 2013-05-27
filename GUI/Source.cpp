@@ -271,7 +271,11 @@ void SDLTest()
 	SDL_Rect rect;
 	rect.x = 100;
 	rect.y = 100;
-	bmp = SDL_LoadBMP("D:\\Picture\\test.bmp");
+
+	bmp = SDL_CreateRGBSurface(SDL_SWSURFACE, 100, 100, screen->format->BitsPerPixel,
+		screen->format->Rmask, screen->format->Gmask, screen->format->Bmask, screen->format->Amask);
+
+	memset(bmp->pixels, 100, bmp->w * bmp->h * bmp->format->BytesPerPixel);
 
 	SDL_BlitSurface(bmp, NULL, screen, &rect);
 
@@ -306,59 +310,15 @@ void SDLTest()
 			}
 		}
 	}
-}
 
-void __stdcall Finished1(void)
-{
-	cout << "Finish time: " << clock() << endl;
-}
-
-int testDecodePerformance(wchar_t *file, int fmt)
-{
-	void *handle;
-	FFSettings settings;
-	char msg[MAX_PATH] = {0};
-	int err = FF_Init();
-	if(err >= 0)
-	{
-		FFInitSetting initSetting = {0};
-		wcscpy_s(initSetting.fileName, file);
-		initSetting.framePixFmt = fmt;
-		initSetting.audioDisable = 1;
-		initSetting.videoDisable = 0;
-		initSetting.useExternalClock = 0;
-		err = FF_InitHandle(&initSetting, &settings, &handle);
-	}
-
-	if(err >= 0)
-	{
-		err = FF_SetCallback(handle, NULL, Finished1);
-	}
-
-	if(err >= 0)
-	{
-		cout << "start time: " << clock() << endl;
-		err = FF_Run(handle);
-	}
-
-	while(cin >> msg)
-	{
-		if(strcmp(msg, "q") == 0)
-			break;
-	}
-
-	FF_CloseHandle(handle);
-
-	return 0;
+	SDL_FreeSurface(bmp);
+	SDL_FreeSurface(screen);
+	SDL_Quit();
 }
 
 int wmain(int argc, wchar_t *argv[])
 {
 	//player(argc, argv);
-	//SDLTest();
-	wchar_t *file = L"D:\\picandvideos\\NCIS_TellAll_032011.avi";
-	testDecodePerformance(file, FF_FRAME_PIXFORMAT_RGB24);
-	//testDecodePerformance(file, FF_FRAME_PIXFORMAT_RGB32);
-	//testDecodePerformance(file, FF_FRAME_PIXFORMAT_YUV420);
+	SDLTest();
 	return 0;
 }

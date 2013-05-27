@@ -20,5 +20,7 @@ private:
 	SwsContext *_swsCtx;
 
 	AVFrame *_decFrame;
+
+	void AllocSwrContextIfNeeded();
 };
 #endif
