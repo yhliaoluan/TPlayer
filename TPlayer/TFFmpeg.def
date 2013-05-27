@@ -3,7 +3,7 @@ LIBRARY TPlayer
 EXPORTS
 
 FF_Init
-FF_InitFile
+FF_InitHandle
 FF_CloseHandle
 FF_SeekTime
 FF_ReadNextFrame

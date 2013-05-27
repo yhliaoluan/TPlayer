@@ -87,6 +87,9 @@ typedef struct _st_FFInitSetting
 	wchar_t fileName[260];
 	int framePixFmt;
 	int sampleFmt;
+	int useExternalClock;//if set to 0. the video will play as fast as possible
+	int audioDisable;
+	int videoDisable;
 } FFInitSetting;
 
 typedef struct _st_FFFrame
@@ -137,7 +140,7 @@ typedef struct _st_FFContext
 #define FF_ERR_GENERAL						-100
 #define FF_ERR_CANNOT_OPEN_FILE				(FF_ERR_GENERAL - 1)
 #define FF_ERR_CANNOT_FIND_STREAM_INFO		(FF_ERR_GENERAL - 2)
-#define FF_ERR_NO_VIDEO_STREAM				(FF_ERR_GENERAL - 3)
+#define FF_ERR_NO_STREAM_FOUND				(FF_ERR_GENERAL - 3)
 #define FF_ERR_CANNOT_OPEN_VIDEO_CODEC		(FF_ERR_GENERAL - 4)
 #define FF_ERR_CANNOT_OPEN_AUDIO_CODEC		(FF_ERR_GENERAL - 5)
 #define FF_ERR_NOPOINTER					(FF_ERR_GENERAL - 6)

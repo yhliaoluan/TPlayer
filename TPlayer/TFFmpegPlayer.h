@@ -39,6 +39,7 @@ private:
 	TFFmpegClock _clock;
 
 	int _audioWait;
+	int _useExternalClock;
 
 #define Player_Cmd_None 0x0000
 #define Player_Cmd_Run  0x0001

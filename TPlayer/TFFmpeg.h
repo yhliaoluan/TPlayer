@@ -8,7 +8,7 @@
 
 int __stdcall FF_Init();
 
-int __stdcall FF_InitFile(const FFInitSetting *pInitSetting,
+int __stdcall FF_InitHandle(const FFInitSetting *pInitSetting,
 						  OUT FFSettings *pSettings,
 						  OUT void **ppHandle);
 

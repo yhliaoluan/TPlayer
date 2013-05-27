@@ -1,8 +1,6 @@
 #include "TFFmpegVideoDecoder.h"
 #include "TFFmpegUtil.h"
 
-#define FF_MAX_CACHED_FRAME_COUNT 3
-
 TFFmpegVideoDecoder::TFFmpegVideoDecoder(FFContext *p, TFFmpegPacketer *pPkter) :
 	_swsCtx(NULL),
 	_decFrame(NULL)
@@ -76,25 +74,25 @@ int TFFmpegVideoDecoder::Decode(FFVideoFrame *frame)
 			if(gotPic)
 			{
 				frame->frame = avcodec_alloc_frame();
-				int numBytes=avpicture_get_size(_ctx->pixFmt,
+				frame->size = avpicture_get_size(_ctx->pixFmt,
 					_ctx->width,
 					_ctx->height);
-				frame->buffer = (uint8_t *)av_malloc(numBytes * sizeof(uint8_t));
+				frame->buffer = (uint8_t *)av_malloc(frame->size * sizeof(uint8_t));
 				avpicture_fill((AVPicture *)frame->frame,
 					frame->buffer,
 					_ctx->pixFmt,
 					_ctx->width,
 					_ctx->height);
-				frame->width = _ctx->width;
-				frame->height = _ctx->height;
-				frame->size = numBytes;
-				int ret = sws_scale(_swsCtx,
+				sws_scale(_swsCtx,
 					_decFrame->data,
 					_decFrame->linesize,
 					0,
 					_decFrame->height,
 					frame->frame->data,
 					frame->frame->linesize);
+
+				frame->width = _ctx->width;
+				frame->height = _ctx->height;
 				frame->frame->pts = av_frame_get_best_effort_timestamp(_decFrame);
 				frame->frame->pkt_duration = av_frame_get_pkt_duration(_decFrame);
 			}

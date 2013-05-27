@@ -17,7 +17,7 @@ int __stdcall FF_Uninit()
 	return 0;
 }
 
-int __stdcall FF_InitFile(const FFInitSetting *pInitSetting,
+int __stdcall FF_InitHandle(const FFInitSetting *pInitSetting,
 						  OUT FFSettings *pSettings,
 						  OUT void **ppHandle)
 {

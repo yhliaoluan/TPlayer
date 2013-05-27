@@ -4,6 +4,7 @@
 #include <iostream>
 #include "TFFmpeg.h"
 #include "SDL.h"
+#include "SDL_opengl.h"
 
 using std::cout;
 using std::cin;
@@ -101,8 +102,7 @@ static void LoopEvents(FFSettings *pSettings, void *handle)
 	SDL_Event event;
 	while(running)
 	{
-		SDL_Delay(50);
-		while(SDL_PollEvent(&event))
+		while(SDL_WaitEvent(&event))
 		{
 			switch(event.type)
 			{
@@ -144,7 +144,7 @@ int player(int argc, wchar_t *argv[])
 		FFInitSetting initSetting = {0};
 		wcscpy_s(initSetting.fileName, argv[1]);
 		initSetting.framePixFmt = FF_FRAME_PIXFORMAT_YUV420;
-		err = FF_InitFile(&initSetting, &settings, &handle);
+		err = FF_InitHandle(&initSetting, &settings, &handle);
 	}
 
 	if(err >= 0)
@@ -277,6 +277,7 @@ void SDLTest()
 
 	SDL_Flip(screen);
 
+	SDL_CreateCond();
 	quit = 0;
 	while(!quit)
 	{
@@ -307,9 +308,57 @@ void SDLTest()
 	}
 }
 
+void __stdcall Finished1(void)
+{
+	cout << "Finish time: " << clock() << endl;
+}
+
+int testDecodePerformance(wchar_t *file, int fmt)
+{
+	void *handle;
+	FFSettings settings;
+	char msg[MAX_PATH] = {0};
+	int err = FF_Init();
+	if(err >= 0)
+	{
+		FFInitSetting initSetting = {0};
+		wcscpy_s(initSetting.fileName, file);
+		initSetting.framePixFmt = fmt;
+		initSetting.audioDisable = 1;
+		initSetting.videoDisable = 0;
+		initSetting.useExternalClock = 0;
+		err = FF_InitHandle(&initSetting, &settings, &handle);
+	}
+
+	if(err >= 0)
+	{
+		err = FF_SetCallback(handle, NULL, Finished1);
+	}
+
+	if(err >= 0)
+	{
+		cout << "start time: " << clock() << endl;
+		err = FF_Run(handle);
+	}
+
+	while(cin >> msg)
+	{
+		if(strcmp(msg, "q") == 0)
+			break;
+	}
+
+	FF_CloseHandle(handle);
+
+	return 0;
+}
+
 int wmain(int argc, wchar_t *argv[])
 {
 	//player(argc, argv);
-	SDLTest();
+	//SDLTest();
+	wchar_t *file = L"D:\\picandvideos\\NCIS_TellAll_032011.avi";
+	testDecodePerformance(file, FF_FRAME_PIXFORMAT_RGB24);
+	//testDecodePerformance(file, FF_FRAME_PIXFORMAT_RGB32);
+	//testDecodePerformance(file, FF_FRAME_PIXFORMAT_YUV420);
 	return 0;
 }

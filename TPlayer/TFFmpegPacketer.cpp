@@ -65,7 +65,7 @@ int TFFmpegPacketer::Start()
 int TFFmpegPacketer::SeekPos(double time)
 {
 	int err = 0;
-	int64_t pos, vpos, apos, spos;
+	int64_t pos, vpos, apos;
 	AVRational timeBaseQ = {1, AV_TIME_BASE};
 	TFF_GetMutex(_readMutex, TFF_INFINITE);
 	TFF_GetMutex(_videoQ->mutex, TFF_INFINITE);
@@ -144,13 +144,13 @@ void __stdcall TFFmpegPacketer::ThreadStart()
 		else/* if(readRet == AVERROR_EOF)*/
 		{
 			av_free(pkt);
-			DebugOutput("TFFmpegPacketer::Thread to end of file.\n");
+			DebugOutput("TFFmpegPacketer::Thread to end of file.");
 			_isFinished = TRUE;
 			TFF_CondBroadcast(_videoQ->cond);
 			TFF_CondBroadcast(_audioQ->cond);
 			TFF_CondBroadcast(_subtitleQ->cond);
 			TFF_CondWait(_readCond, _readMutex);
-			DebugOutput("TFFmpegPacketer::Thread awake.\n");
+			DebugOutput("TFFmpegPacketer::Thread awake.");
 		}
 		TFF_ReleaseMutex(_readMutex);
 	}
@@ -197,7 +197,7 @@ int TFFmpegPacketer::GetPacket(FFPacketQueue *q, FFPacketList **ppkt)
 		q->count--;
 		q->size -= first->pkt->size;
 		*ppkt = first;
-		if(q->count <= 1)
+		if(q->count <= 1 && !_isFinished)
 			TFF_CondBroadcast(_readCond);
 	}
 	TFF_ReleaseMutex(q->mutex);

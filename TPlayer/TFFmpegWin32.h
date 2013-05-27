@@ -54,10 +54,11 @@ TFF_WaitEvent(TFF_Event ev, int timeout)
 
 typedef struct _st_TFF_Cond_Win32
 {
-	size_t waitersCount;
-	CRITICAL_SECTION waitersLock;
-	TFF_Event waitersDone;
-	HANDLE sema;
+	size_t waiters;
+	size_t signals;
+	CRITICAL_SECTION mutex;
+	HANDLE semaWait;
+	HANDLE semaDone;
 } TFF_Cond_Win32, *PTFF_Cond_Win32;
 #define TFF_Cond PTFF_Cond_Win32
 
@@ -66,6 +67,9 @@ TFF_Cond TFF_CreateCondWin32();
 
 int TFF_DestroyCondWin32(TFF_Cond *cv);
 #define TFF_CondDestroy TFF_DestroyCondWin32
+
+int TFF_WaitCondTimeoutWin32(TFF_Cond cv, TFF_Mutex mutex, unsigned long timeout);
+#define TFF_CondWaitTimeout TFF_WaitCondTimeoutWin32
 
 int TFF_WaitCondWin32(TFF_Cond cv, TFF_Mutex mutex);
 #define TFF_CondWait TFF_WaitCondWin32
