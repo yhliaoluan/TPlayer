@@ -21,6 +21,10 @@ private:
 
 	AVFrame *_decFrame;
 
-	void AllocSwrContextIfNeeded();
+	int _curOutputWidth;
+	int _curOutputHeight;
+	int _curOutputPixFmt;
+
+	int AllocSwrContextIfNeeded(AVFrame *frame);
 };
 #endif

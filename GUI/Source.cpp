@@ -1,6 +1,7 @@
 ﻿#include <Windows.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string>
 #include <iostream>
 #include "TFFmpeg.h"
 #include "SDL.h"
@@ -69,7 +70,7 @@ static int InitSDL(FFSettings *setting)
 			w = 200;
 			h = 200;
 		}
-		_context->window = SDL_SetVideoMode(w, h, 0, SDL_SWSURFACE/* | SDL_RESIZABLE*/);
+		_context->window = SDL_SetVideoMode(w, h, 0, SDL_SWSURFACE | SDL_NOFRAME/* | SDL_RESIZABLE*/);
 		_context->overlay = SDL_CreateYUVOverlay(w, h, SDL_IYUV_OVERLAY, _context->window);
 		SDL_WM_SetCaption("SDL Player", NULL);
 	}
@@ -95,40 +96,58 @@ static int InitSDL(FFSettings *setting)
 	return ret;
 }
 
+static DWORD WINAPI InputThread(void *)
+{
+	std::string s;
+	SDL_Event event;
+	while(std::getline(cin, s))
+	{
+		
+		if(s.compare("q") == 0)
+		{
+			event.type = SDL_QUIT;
+			SDL_PushEvent(&event);
+			break;
+		}
+		printf("Unrecognize command '%s'\n", s.c_str());
+	}
+	printf("Input thread exit.\n");
+	return 0;
+}
+
 static void LoopEvents(FFSettings *pSettings, void *handle)
 {
 	BOOL running = TRUE;
 
 	SDL_Event event;
-	while(running)
+	while(running && SDL_WaitEvent(&event))
 	{
-		while(SDL_WaitEvent(&event))
+		switch(event.type)
 		{
-			switch(event.type)
-			{
-			case SDL_QUIT:
-				running = FALSE;
-				break;
-			case SDL_VIDEORESIZE:
-				/*w = event.resize.w;
-				h = event.resize.h;
-				r = w / (double)h;
-				if(r > srcR)
-					w = (int)(h * srcR + 0.5);
-				else if(r < srcR)
-					h = (int)(w / srcR + 0.5);
-				if(w % 2 != 0)
-					w -= 1;
-				if(h % 2 != 0)
-					h -= 1;
-				cout << "Resize w:" << w << " h:" << h << endl;
-				FF_SetResolution(handle, w, h);*/
-				break;
-			case SDL_KEYDOWN:
-				break;
-			default:
-				break;
-			}
+		case SDL_QUIT:
+			running = FALSE;
+			break;
+			//TODO: handle resize event.
+		case SDL_VIDEORESIZE:
+			/*w = event.resize.w;
+			h = event.resize.h;
+			r = w / (double)h;
+			if(r > srcR)
+				w = (int)(h * srcR + 0.5);
+			else if(r < srcR)
+				h = (int)(w / srcR + 0.5);
+			if(w % 2 != 0)
+				w -= 1;
+			if(h % 2 != 0)
+				h -= 1;
+			cout << "Resize w:" << w << " h:" << h << endl;
+			FF_SetResolution(handle, w, h);*/
+			break;
+			//TODO: shorcuts, full screen etc...
+		case SDL_KEYDOWN:
+			break;
+		default:
+			break;
 		}
 	}
 }
@@ -138,12 +157,16 @@ int player(int argc, wchar_t *argv[])
 	void *handle;
 	FFSettings settings;
 	char msg[MAX_PATH] = {0};
+
 	int err = FF_Init();
 	if(err >= 0)
 	{
 		FFInitSetting initSetting = {0};
 		wcscpy_s(initSetting.fileName, argv[1]);
 		initSetting.framePixFmt = FF_FRAME_PIXFORMAT_YUV420;
+		initSetting.audioDisable = 0;
+		initSetting.videoDisable = 0;
+		initSetting.useExternalClock = 1;
 		err = FF_InitHandle(&initSetting, &settings, &handle);
 	}
 
@@ -165,15 +188,19 @@ int player(int argc, wchar_t *argv[])
 		if(settings.v.valid)
 			err = FF_Run(handle);
 		if(settings.a.valid)
-		{
 			SDL_PauseAudio(0);
-		}
 	}
 
+	HANDLE inputThread = CreateThread(NULL, 0, InputThread, NULL, 0, NULL);
 	if(err >= 0)
 		LoopEvents(&settings, handle);
 
-	SDL_CloseAudio();
+	if(WaitForSingleObject(inputThread, 1000) > 0)
+		TerminateThread(inputThread, 0);
+	CloseHandle(inputThread);
+
+	if(settings.a.valid)
+		SDL_CloseAudio();
 	if(err >= 0)
 	{
 		err = FF_CloseHandle(handle);
@@ -200,7 +227,7 @@ int testDecodeSubtitle(wchar_t *file)
 {
 	AVFormatContext *ctx = NULL;
 	char szFile[MAX_PATH] = {0};
-	int i, subtitleIndex, err, gotSubtitle;
+	int subtitleIndex, err, gotSubtitle;
 	AVSubtitle subtitle;
 	wchar_t info[1024] = {0};
 	av_register_all();
@@ -318,7 +345,7 @@ void SDLTest()
 
 int wmain(int argc, wchar_t *argv[])
 {
-	//player(argc, argv);
-	SDLTest();
+	player(argc, argv);
+	//SDLTest();
 	return 0;
 }

@@ -40,7 +40,7 @@ void TFFmpegClock::Stop()
 void TFFmpegClock::Sync(long externalMS)
 {
 	Tick();
-	if(abs(_ms - externalMS) > 100)
+	if(externalMS > 0 && abs(_ms - externalMS) > 20)
 	{
 		DebugOutput("Sync external clock from %d to %d", _ms, externalMS);
 		_ms = externalMS;

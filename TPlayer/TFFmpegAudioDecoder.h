@@ -17,7 +17,7 @@ public:
 
 	int Init(void);
 
-	//fill stream with length len
+	//fill stream with length len and out put pts in millisecond
 	int Fill(uint8_t *stream, int len, int64_t *pts);
 private:
 	FFContext *_ctx;
@@ -35,16 +35,16 @@ private:
 		int size;
 		uint8_t *curPtr;
 		int remainSize;
-		int64_t pts;
+		int64_t pts; //in ms
+		int64_t duration; //in ms
 		struct TFFAudioFrameList *next;
 	} *_rawFrames;
 
 	AVFrame *_decFrame;
 
 	int Decode();
-	void CheckBuffer(int newSize);
 	void AllocCtxIfNeeded(const AVFrame *);
-	int CopyData(AVFrame *frame);
+	int CopyData(AVFrame *frame, AVPacket *pkt);
 };
 
 #endif

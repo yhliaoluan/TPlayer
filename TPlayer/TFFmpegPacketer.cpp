@@ -128,10 +128,11 @@ void __stdcall TFFmpegPacketer::ThreadStart()
 		readRet = av_read_frame(_ctx->pFmtCtx, pkt);
 		if(readRet >= 0)
 		{
-			if(_ctx->handleVideo && pkt->stream_index == _ctx->vsIndex)
+			if(pkt->stream_index == _ctx->vsIndex)
 				PutIntoPktQueue(_videoQ, pkt);
-			else if(_ctx->handleAudio && pkt->stream_index == _ctx->asIndex)
+			else if(pkt->stream_index == _ctx->asIndex)
 				PutIntoPktQueue(_audioQ, pkt);
+			//TODO: handle subtitle stream
 			/*else if (pkt->stream_index == _ctx->ssIndex)
 				PutIntoPktQueue(_subtitleQ, pkt);*/
 			else

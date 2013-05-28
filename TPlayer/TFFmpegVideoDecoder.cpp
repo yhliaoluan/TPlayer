@@ -21,58 +21,58 @@ TFFmpegVideoDecoder::~TFFmpegVideoDecoder()
 
 int TFFmpegVideoDecoder::Init()
 {
-	AllocSwrContextIfNeeded();
 	return 0;
 }
 
-void TFFmpegVideoDecoder::AllocSwrContextIfNeeded()
+int TFFmpegVideoDecoder::AllocSwrContextIfNeeded(AVFrame *frame)
 {
-	if(_ctx->videoStream->codec->width != _ctx->width ||
-		_ctx->videoStream->codec->height != _ctx->height ||
-		_ctx->videoStream->codec->pix_fmt != _ctx->pixFmt)
+	if(_curOutputWidth != _ctx->width ||
+		_curOutputHeight != _ctx->height ||
+		_curOutputPixFmt != _ctx->pixFmt)
 	{
-		_swsCtx = sws_getCachedContext(
-			_swsCtx,
-			_ctx->videoStream->codec->width,
-			_ctx->videoStream->codec->height,
-			_ctx->videoStream->codec->pix_fmt,
-			_ctx->width,
-			_ctx->height,
-			_ctx->pixFmt,
-			SWS_FAST_BILINEAR, NULL, NULL, NULL);
+		if(frame->width != _ctx->width ||
+			frame->height != _ctx->height ||
+			(AVPixelFormat)frame->format != _ctx->pixFmt)
+		{
+			DebugOutput("Alloc sws context. from %d width, %d height, %d pixel format to %d width, %d height, %d pixel format.",
+				frame->width, frame->height, frame->format,
+				_ctx->width, _ctx->height, (int)_ctx->pixFmt);
+			_swsCtx = sws_getCachedContext(
+				_swsCtx,
+				frame->width,
+				frame->height,
+				(AVPixelFormat)frame->format,
+				_ctx->width,
+				_ctx->height,
+				_ctx->pixFmt,
+				SWS_FAST_BILINEAR, NULL, NULL, NULL);
+		}
+		else if(_swsCtx)
+		{
+			sws_freeContext(_swsCtx);
+			_swsCtx = NULL;
+		}
+
+		_curOutputHeight = _ctx->height;
+		_curOutputWidth = _ctx->width;
+		_curOutputPixFmt = _ctx->pixFmt;
+
+		return 1;
 	}
+	return 0;
 }
 
 int TFFmpegVideoDecoder::SetResolution(int width, int height)
 {
+	//TODO: lock and align
 	_ctx->width = width;
 	_ctx->height = height;
-
-	if(_ctx->videoStream->codec->width != _ctx->width ||
-		_ctx->videoStream->codec->height != _ctx->height ||
-		_ctx->videoStream->codec->pix_fmt != _ctx->pixFmt)
-	{
-		_swsCtx = sws_getCachedContext(
-			_swsCtx,
-			_ctx->videoStream->codec->width,
-			_ctx->videoStream->codec->height,
-			_ctx->videoStream->codec->pix_fmt,
-			_ctx->width,
-			_ctx->height,
-			_ctx->pixFmt,
-			SWS_FAST_BILINEAR, NULL, NULL, NULL);
-	}
-	else if(!_swsCtx)
-	{
-		sws_freeContext(_swsCtx);
-		_swsCtx = NULL;
-	}
 	return 0;
 }
 
 int TFFmpegVideoDecoder::Decode(FFVideoFrame *frame)
 {
-	FFPacketList *pPktList = NULL;
+	FFPacketList *pktList = NULL;
 	int gotPic = 0;
 	int ret = FF_OK;
 	if(!frame)
@@ -82,9 +82,9 @@ int TFFmpegVideoDecoder::Decode(FFVideoFrame *frame)
 	}
 	while(!gotPic)
 	{
-		if(_pkter->GetVideoPacket(&pPktList) >= 0)
+		if(_pkter->GetVideoPacket(&pktList) >= 0)
 		{
-			AVPacket *pkt = (AVPacket *)pPktList->pkt;
+			AVPacket *pkt = (AVPacket *)pktList->pkt;
 			if(_decFrame)
 				avcodec_get_frame_defaults(_decFrame);
 			else
@@ -94,19 +94,20 @@ int TFFmpegVideoDecoder::Decode(FFVideoFrame *frame)
 				_decFrame, &gotPic, pkt);
 			if(gotPic)
 			{
-				frame->frame = avcodec_alloc_frame();
-				frame->size = avpicture_get_size(_ctx->pixFmt,
-					_ctx->width,
-					_ctx->height);
-				frame->buffer = (uint8_t *)av_malloc(frame->size * sizeof(uint8_t));
-				avpicture_fill((AVPicture *)frame->frame,
-					frame->buffer,
-					_ctx->pixFmt,
-					_ctx->width,
-					_ctx->height);
-
+				AllocSwrContextIfNeeded(_decFrame);
 				if(_swsCtx)
 				{
+					frame->frame = avcodec_alloc_frame();
+					int numBytes = avpicture_get_size(_ctx->pixFmt,
+						_ctx->width,
+						_ctx->height);
+					frame->buffer = (uint8_t *)av_malloc(numBytes * sizeof(uint8_t));
+					avpicture_fill((AVPicture *)frame->frame,
+						frame->buffer,
+						_ctx->pixFmt,
+						_ctx->width,
+						_ctx->height);
+
 					sws_scale(_swsCtx,
 						_decFrame->data,
 						_decFrame->linesize,
@@ -117,17 +118,17 @@ int TFFmpegVideoDecoder::Decode(FFVideoFrame *frame)
 				}
 				else
 				{
-					for(int i = 0; i < 4; i++)
-					{
-						memcpy(frame->frame->data[i], _decFrame->data[i], _decFrame->linesize[i]);
-					}
+					frame->frame = _decFrame;
+					frame->buffer = NULL;
 				}
-				frame->width = _ctx->width;
-				frame->height = _ctx->height;
+				frame->width = _decFrame->width;
+				frame->height = _decFrame->height;
 				frame->frame->pts = av_frame_get_best_effort_timestamp(_decFrame);
 				frame->frame->pkt_duration = av_frame_get_pkt_duration(_decFrame);
+				if(frame->frame == _decFrame)
+					_decFrame = NULL;
 			}
-			_pkter->FreeSinglePktList(&pPktList);
+			_pkter->FreeSinglePktList(&pktList);
 		}
 		else
 		{

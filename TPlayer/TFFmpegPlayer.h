@@ -41,14 +41,18 @@ private:
 	int _audioWait;
 	int _useExternalClock;
 
-#define Player_Cmd_None 0x0000
-#define Player_Cmd_Run  0x0001
-#define Player_Cmd_Exit 0x0002
-#define Player_Cmd_Seek 0x0004
-#define Player_Cmd_Step 0x0008
-#define Player_Cmd_Stop 0x0010
-#define Player_Cmd_Get  0x0020
-#define Player_Cmd_Pause 0x0040
+	enum
+	{
+		Player_Cmd_None = 0x0000,
+		Player_Cmd_Run  = 0x0001,
+		Player_Cmd_Exit = 0x0002,
+		Player_Cmd_Seek = 0x0004,
+		Player_Cmd_Step = 0x0008,
+		Player_Cmd_Stop = 0x0010,
+		Player_Cmd_Get  = 0x0020,
+		Player_Cmd_Pause = 0x0040
+	};
+
 	int _cmd;
 
 	enum { TFF_PLAYTYPE_VIDEO = 0x0001, TFF_PLAYTYPE_AUDIO = 0x0002 };

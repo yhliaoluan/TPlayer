@@ -41,7 +41,7 @@ typedef struct _st_FFVideoFrame
 	uint8_t *buffer;
 	int width;
 	int height;
-	size_t size;
+	//size_t size;
 	struct _st_FFVideoFrame *next;
 } FFVideoFrame;
 
@@ -82,6 +82,7 @@ typedef struct _st_FFSettings
 
 #define FF_AUDIO_SAMPLE_FMT_S16 0
 
+//TODO: change file name from wchar to char
 typedef struct _st_FFInitSetting
 {
 	wchar_t fileName[260];
@@ -96,10 +97,8 @@ typedef struct _st_FFFrame
 {
 	unsigned char **data;
 	int *linesize;
-	unsigned char *buff;
 	int keyFrame;
 	long long pts;
-	int size;
 	double time;
 	long long duration;//in ms
 	int width;
@@ -117,8 +116,6 @@ typedef struct _st_FFContext
 	int vsIndex; //video stream index
 	int asIndex; //audio stream index
 	int ssIndex; //subtitle stream index
-	int handleVideo;
-	int handleAudio;
 
 	//video settings
 	enum AVPixelFormat pixFmt;

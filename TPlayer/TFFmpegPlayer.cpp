@@ -63,9 +63,7 @@ int TFFmpegPlayer::Convert(FFVideoFrame *in, FFFrame *out)
 	int ret = FF_OK;
 
 	out->data = in->frame->data;
-	out->buff = in->buffer;
 	out->linesize = in->frame->linesize;
-	out->size = in->size;
 	out->pts = in->frame->pts;
 	out->width = in->width;
 	out->height = in->height;
@@ -181,7 +179,11 @@ void TFFmpegPlayer::SyncVideo(FFFrame *f)
 	{
 		long sleepMS = ((long)(f->time * 1000) - _clock.GetTime());
 		if(sleepMS > 0)
+		{
+			if(sleepMS > 1000)
+				DebugOutput("Sleep ms is too long. %d", sleepMS);
 			TFF_Sleep(sleepMS);
+		}
 	}
 }
 
@@ -293,8 +295,6 @@ int TFFmpegPlayer::InitCtx(const FFInitSetting *setting)
 	_ctx = (FFContext *)av_mallocz(sizeof(FFContext));
 	_ctx->vsIndex = -1;
 	_ctx->asIndex = -1;
-	_ctx->handleAudio = !setting->audioDisable;
-	_ctx->handleVideo = !setting->videoDisable;
 	_ctx->pixFmt = FF_GetAVPixFmt(setting->framePixFmt);
 
 	WideCharToMultiByte(
@@ -328,7 +328,7 @@ int TFFmpegPlayer::InitCtx(const FFInitSetting *setting)
 
 	av_dump_format(_ctx->pFmtCtx, 0, szFile, 0);
 
-	if(_ctx->handleVideo)
+	if(!setting->videoDisable)
 	{
 		_ctx->vsIndex = av_find_best_stream(_ctx->pFmtCtx, AVMEDIA_TYPE_VIDEO, _ctx->vsIndex, -1,
 			NULL, 0);
@@ -350,7 +350,7 @@ int TFFmpegPlayer::InitCtx(const FFInitSetting *setting)
 		} 
 	}
 
-	if(_ctx->handleAudio)
+	if(!setting->audioDisable)
 	{
 		_ctx->asIndex = av_find_best_stream(_ctx->pFmtCtx, AVMEDIA_TYPE_AUDIO, _ctx->asIndex,
 			_ctx->vsIndex, NULL, 0);
@@ -455,19 +455,21 @@ int TFFmpegPlayer::FillAudioStream(uint8_t *stream, int len)
 	TFF_GetMutex(_flushMutex, TFF_INFINITE);
 	if((ret = _audioDecoder->Fill(stream, len, &pts)) >= 0 && ret != FF_EOF)
 	{
-		long ms = (long)(pts * 1000 * av_q2d(_ctx->audioStream->time_base));
 		if(_audioWait)
 		{
-			long sleepMS = ms - _clock.GetTime();
-			if(sleepMS > 0)
+			if(pts != AV_NOPTS_VALUE)
 			{
-				DebugOutput("Audio will start in %d ms.", sleepMS);
-				TFF_Sleep(sleepMS);
+				long sleepMS = (long)(pts - _clock.GetTime());
+				if(sleepMS > 0)
+				{
+					DebugOutput("Audio will start in %d ms.", sleepMS);
+					TFF_Sleep(sleepMS);
+				}
 			}
 			_audioWait = 0;
 		}
 		else
-			_clock.Sync(ms);
+			_clock.Sync((long)pts);
 	}
 	else if(ret == FF_EOF)
 	{

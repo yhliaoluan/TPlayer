@@ -10,6 +10,7 @@ TFFmpegSubtitleDecoder::~TFFmpegSubtitleDecoder(void)
 {
 }
 
+//TODO: handle subtitle decode.
 int TFFmpegSubtitleDecoder::Decoed()
 {
 	int ret = FF_OK;
