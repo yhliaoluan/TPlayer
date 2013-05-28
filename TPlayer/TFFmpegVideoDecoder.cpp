@@ -32,7 +32,8 @@ int TFFmpegVideoDecoder::AllocSwrContextIfNeeded(AVFrame *frame)
 	{
 		if(frame->width != _ctx->width ||
 			frame->height != _ctx->height ||
-			(AVPixelFormat)frame->format != _ctx->pixFmt)
+			(AVPixelFormat)frame->format != _ctx->pixFmt ||
+			1)
 		{
 			DebugOutput("Alloc sws context. from %d width, %d height, %d pixel format to %d width, %d height, %d pixel format.",
 				frame->width, frame->height, frame->format,

@@ -12,7 +12,7 @@ using std::cin;
 using std::endl;
 
 #define CONTROL_HEIGHT 100
-#define SDL_AUDIO_BUFFER_SIZE 4096
+#define SDL_AUDIO_BUFFER_SIZE 1024
 
 typedef struct _st_PlayContext
 {
@@ -52,6 +52,50 @@ void AudioCallback(void *userdata, Uint8 *stream, int len)
 	FF_CopyAudioStream(context->handle, stream, len);
 }
 
+static int audio_open(void *opaque, int64_t wanted_channel_layout, int wanted_nb_channels, int wanted_sample_rate)
+{
+    SDL_AudioSpec wanted_spec, spec;
+    const int next_nb_channels[] = {0, 0, 1, 6, 2, 6, 4, 6};
+
+    if (!wanted_channel_layout || wanted_nb_channels != av_get_channel_layout_nb_channels(wanted_channel_layout)) {
+        wanted_channel_layout = av_get_default_channel_layout(wanted_nb_channels);
+        wanted_channel_layout &= ~AV_CH_LAYOUT_STEREO_DOWNMIX;
+    }
+    wanted_spec.channels = av_get_channel_layout_nb_channels(wanted_channel_layout);
+    wanted_spec.freq = wanted_sample_rate;
+    if (wanted_spec.freq <= 0 || wanted_spec.channels <= 0) {
+        fprintf(stderr, "Invalid sample rate or channel count!\n");
+        return -1;
+    }
+    wanted_spec.format = AUDIO_S16SYS;
+    wanted_spec.silence = 0;
+    wanted_spec.samples = SDL_AUDIO_BUFFER_SIZE;
+    wanted_spec.callback = AudioCallback;
+    wanted_spec.userdata = opaque;
+    while (SDL_OpenAudio(&wanted_spec, &spec) < 0) {
+        fprintf(stderr, "SDL_OpenAudio (%d channels): %s\n", wanted_spec.channels, SDL_GetError());
+        wanted_spec.channels = next_nb_channels[FFMIN(7, wanted_spec.channels)];
+        if (!wanted_spec.channels) {
+            fprintf(stderr, "No more channel combinations to try, audio open failed\n");
+            return -1;
+        }
+        wanted_channel_layout = av_get_default_channel_layout(wanted_spec.channels);
+    }
+    if (spec.format != AUDIO_S16SYS) {
+        fprintf(stderr, "SDL advised audio format %d is not supported!\n", spec.format);
+        return -1;
+    }
+    if (spec.channels != wanted_spec.channels) {
+        wanted_channel_layout = av_get_default_channel_layout(spec.channels);
+        if (!wanted_channel_layout) {
+            fprintf(stderr, "SDL advised channel count %d is not supported!\n", spec.channels);
+            return -1;
+        }
+    }
+
+    return spec.size;
+}
+
 static int InitSDL(FFSettings *setting)
 {
 	int ret = 0;
@@ -70,7 +114,7 @@ static int InitSDL(FFSettings *setting)
 			w = 200;
 			h = 200;
 		}
-		_context->window = SDL_SetVideoMode(w, h, 0, SDL_SWSURFACE | SDL_NOFRAME/* | SDL_RESIZABLE*/);
+		_context->window = SDL_SetVideoMode(w, h, 0, SDL_HWSURFACE/* | SDL_RESIZABLE*/);
 		_context->overlay = SDL_CreateYUVOverlay(w, h, SDL_IYUV_OVERLAY, _context->window);
 		SDL_WM_SetCaption("SDL Player", NULL);
 	}
@@ -87,7 +131,12 @@ static int InitSDL(FFSettings *setting)
 		wantedSpec.userdata = _context;
 
 		SDL_AudioSpec spec;
-		SDL_OpenAudio(&wantedSpec, &spec);
+		ret = SDL_OpenAudio(&wantedSpec, &spec);
+
+		if(ret < 0)
+		{
+			printf("%s\n", SDL_GetError());
+		}
 	}
 
 	if(ret < 0 || (!setting->v.valid && !setting->a.valid))
