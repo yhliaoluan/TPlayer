@@ -1,0 +1,6 @@
+LIBRARY "TPlayer.Util.dll"
+
+EXPORTS
+
+TFFLogInit
+TFFLog
