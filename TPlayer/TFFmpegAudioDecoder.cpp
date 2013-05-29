@@ -35,7 +35,10 @@ TFFmpegAudioDecoder::~TFFmpegAudioDecoder()
 int TFFmpegAudioDecoder::SetOutputSetting(FFAudioSetting *setting)
 {
 	if(!setting)
+	{
+		TFFLog(TFF_LOG_LEVEL_ERROR, "Non-pointer setting.");
 		return FF_ERR_NOPOINTER;
+	}
 	if(setting->channelLayout > 0)
 		_outputSetting.channelLayout = setting->channelLayout;
 	if(setting->channels > 0)
@@ -123,7 +126,7 @@ int TFFmpegAudioDecoder::AllocCtxIfNeeded(const AVFrame *frame)
 
 		if(!_swr || (ret = swr_init(_swr)) < 0)
 		{
-			TFFLog(TFF_LOG_LEVEL_ERROR, "Cannot init swr context.");
+			TFFLog(TFF_LOG_LEVEL_ERROR, "Cannot init swr context. %d", ret);
 			return -1;
 		}
 

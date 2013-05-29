@@ -73,7 +73,6 @@ int TFFmpegVideoDecoder::SetOutputSetting(FFVideoSetting *setting)
 
 int TFFmpegVideoDecoder::SetResolution(int width, int height)
 {
-	//TODO: lock and align
 	TFF_GetMutex(_settingMutex, TFF_INFINITE);
 	if(_outputSetting.width != width ||
 		_outputSetting.height != height)

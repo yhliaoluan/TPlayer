@@ -27,7 +27,8 @@ void TFFmpegPlayer::Uninit()
 	TFF_CondBroadcast(_cmdCond);
 	if(_thread)
 	{
-		TFF_WaitThread(_thread, 1000);
+		if(TFF_WaitThread(_thread, 1000) > 0)
+			TFFLog(TFF_LOG_LEVEL_WARNING, "Wait for player thread exit time out.");
 		CloseThreadP(&_thread);
 	}
 	if(_videoDecoder)
@@ -75,7 +76,7 @@ int TFFmpegPlayer::Convert(FFVideoFrame *in, FFFrame *out)
 
 void TFFmpegPlayer::ThreadStart()
 {
-	TFFLog(TFF_LOG_LEVEL_DEBUG, "TFFmpegPlayer::Thread thread start.");
+	TFFLog(TFF_LOG_LEVEL_INFO, "TFFmpegPlayer::Thread thread start.");
 	int ret = 0;
 	BOOL holdMutex = FALSE;
 	FFFrame frame = {0};
@@ -170,7 +171,7 @@ void TFFmpegPlayer::ThreadStart()
 		if(!holdMutex)
 			TFF_ReleaseMutex(_cmdMutex);
 	}
-	TFFLog(TFF_LOG_LEVEL_DEBUG, "TFFmpegPlayer::Thread thread exit.");
+	TFFLog(TFF_LOG_LEVEL_INFO, "TFFmpegPlayer::Thread thread exit.");
 }
 
 void TFFmpegPlayer::SyncVideo(FFFrame *f)
@@ -181,7 +182,7 @@ void TFFmpegPlayer::SyncVideo(FFFrame *f)
 		if(sleepMS > 0)
 		{
 			if(sleepMS > 1000)
-				TFFLog(TFF_LOG_LEVEL_DEBUG, "Sleep ms is too long. %d", sleepMS);
+				TFFLog(TFF_LOG_LEVEL_WARNING, "Sleep ms is too long. %d", sleepMS);
 			TFF_Sleep(sleepMS);
 		}
 	}
@@ -307,7 +308,7 @@ int TFFmpegPlayer::InitCtx(const FFInitSetting *setting)
 
 	if(!setting)
 	{
-		TFFLog(TFF_LOG_LEVEL_DEBUG, "Init setting is null.");
+		TFFLog(TFF_LOG_LEVEL_ERROR, "Init setting is null.");
 		ret = FF_ERR_NOPOINTER;
 		return ret;
 	}
@@ -327,12 +328,14 @@ int TFFmpegPlayer::InitCtx(const FFInitSetting *setting)
 		NULL,
 		NULL);
 
+	TFFLog(TFF_LOG_LEVEL_INFO, "Open file %s", szFile);
+
 	ret = avformat_open_input(&_ctx->fmtCtx,
 		szFile, NULL, NULL);
 
 	if(ret < 0)
 	{
-		TFFLog(TFF_LOG_LEVEL_DEBUG, "avformat_open_input failed.");
+		TFFLog(TFF_LOG_LEVEL_ERROR, "avformat_open_input failed. %d", ret);
 		ret = FF_ERR_CANNOT_OPEN_FILE;
 		return ret;
 	}
@@ -341,7 +344,7 @@ int TFFmpegPlayer::InitCtx(const FFInitSetting *setting)
 
 	if(ret < 0)
 	{
-		TFFLog(TFF_LOG_LEVEL_DEBUG, "avformat_find_stream_info failed.");
+		TFFLog(TFF_LOG_LEVEL_ERROR, "avformat_find_stream_info failed. %d", ret);
 		ret = FF_ERR_CANNOT_FIND_STREAM_INFO;
 		return ret;
 	}
@@ -355,7 +358,7 @@ int TFFmpegPlayer::InitCtx(const FFInitSetting *setting)
 
 		if(_ctx->vsIndex < 0)
 		{
-			TFFLog(TFF_LOG_LEVEL_DEBUG, "Cannot find video stream.");
+			TFFLog(TFF_LOG_LEVEL_INFO, "Cannot find video stream.");
 		}
 		else
 		{
@@ -376,7 +379,7 @@ int TFFmpegPlayer::InitCtx(const FFInitSetting *setting)
 			_ctx->vsIndex, NULL, 0);
 
 		if(_ctx->asIndex < 0)
-			TFFLog(TFF_LOG_LEVEL_DEBUG, "Cannot find audio stream.");
+			TFFLog(TFF_LOG_LEVEL_INFO, "Cannot find audio stream.");
 		else
 		{
 			_ctx->audioStream = _ctx->fmtCtx->streams[_ctx->asIndex];
@@ -401,12 +404,12 @@ int TFFmpegPlayer::InitCtx(const FFInitSetting *setting)
 	}
 	if(_ctx->audioStream)
 	{
-		TFFLog(TFF_LOG_LEVEL_DEBUG, "Audio information:");
 		int64_t channelLayout = av_get_default_channel_layout(_ctx->audioStream->codec->channels);
-		TFFLog(TFF_LOG_LEVEL_DEBUG, "Sample rate: %d MHz", _ctx->audioStream->codec->sample_rate);
-		TFFLog(TFF_LOG_LEVEL_DEBUG, "Stream time base %d/%d", _ctx->audioStream->time_base.num, _ctx->audioStream->time_base.den);
 		char channelStr[MAX_PATH] = {0};
 		av_get_channel_layout_string(channelStr, MAX_PATH, _ctx->audioStream->codec->channels, channelLayout);
+		TFFLog(TFF_LOG_LEVEL_DEBUG, "Audio information:");
+		TFFLog(TFF_LOG_LEVEL_DEBUG, "Sample rate: %d MHz", _ctx->audioStream->codec->sample_rate);
+		TFFLog(TFF_LOG_LEVEL_DEBUG, "Stream time base %d/%d", _ctx->audioStream->time_base.num, _ctx->audioStream->time_base.den);
 		TFFLog(TFF_LOG_LEVEL_DEBUG, "Channles: %d", _ctx->audioStream->codec->channels);
 		TFFLog(TFF_LOG_LEVEL_DEBUG, "Channel layout: %s", channelStr);
 		TFFLog(TFF_LOG_LEVEL_DEBUG, "Codec name :%s", _ctx->audioStream->codec->codec->long_name);
@@ -473,12 +476,12 @@ int TFFmpegPlayer::FillAudioStream(uint8_t *stream, int len)
 	{
 		if(_audioWait)
 		{
-			if(pts != AV_NOPTS_VALUE)
+			if(pts > 0)
 			{
 				long sleepMS = (long)(pts - _clock.GetTime());
 				if(sleepMS > 0)
 				{
-					TFFLog(TFF_LOG_LEVEL_DEBUG, "Audio will start in %d ms.", sleepMS);
+					TFFLog(TFF_LOG_LEVEL_INFO, "Audio will start in %d ms.", sleepMS);
 					TFF_Sleep(sleepMS);
 				}
 			}
