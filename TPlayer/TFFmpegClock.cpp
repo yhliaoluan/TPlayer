@@ -42,7 +42,7 @@ void TFFmpegClock::Sync(long externalMS)
 	Tick();
 	if(externalMS > 0 && abs(_ms - externalMS) > 20)
 	{
-		DebugOutput("Sync external clock from %d to %d", _ms, externalMS);
+		TFFLog(TFF_LOG_LEVEL_DEBUG, "Sync external clock from %d to %d", _ms, externalMS);
 		_ms = externalMS;
 	}
 }

@@ -41,5 +41,6 @@ int __stdcall FF_Scale(void *pCtx,
 int __stdcall FF_SetResolution(void *p, int width, int height);
 
 int __stdcall FF_CopyAudioStream(void *p, uint8_t *stream, int len);
+int __stdcall FF_SetAudioOutputSetting(void *p, FFAudioSetting *setting);
 
 #endif

@@ -30,7 +30,7 @@ int __stdcall FF_InitHandle(const FFInitSetting *pInitSetting,
 		goto err_end;
 
 	if(pSettings)
-		player->GetVideoInfo(pSettings);
+		player->GetMediaInfo(pSettings);
 
 	player->Start();
 
@@ -153,4 +153,12 @@ int __stdcall FF_CopyAudioStream(void *p, uint8_t *stream, int len)
 	if(player)
 		return player->FillAudioStream(stream, len);
 	return 0;
+}
+
+int __stdcall FF_SetAudioOutputSetting(void *p, FFAudioSetting *setting)
+{
+	TFFmpegPlayer *player = (TFFmpegPlayer *)p;
+	if(player)
+		return player->SetAudioOutputSetting(setting);
+	return FF_OK;
 }

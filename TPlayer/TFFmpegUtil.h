@@ -3,11 +3,9 @@
 
 #include "TFFmpegPlatform.h"
 #include "TFFmpegDef.h"
+#include "log.h"
 
 #define FF_DEBUG_OUTPUT
-
-void
-DebugOutput(const char *msg, ...);
 
 static inline void
 CloseThreadP(TFF_Thread *thread)

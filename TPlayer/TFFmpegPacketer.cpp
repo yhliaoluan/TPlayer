@@ -77,18 +77,18 @@ int TFFmpegPacketer::SeekPos(double time)
 	if(_ctx->vsIndex > 0)
 	{
 		vpos = av_rescale_q(pos, timeBaseQ, _ctx->videoStream->time_base); 
-		err = av_seek_frame(_ctx->pFmtCtx, _ctx->vsIndex, vpos, AVSEEK_FLAG_BACKWARD);
+		err = av_seek_frame(_ctx->fmtCtx, _ctx->vsIndex, vpos, AVSEEK_FLAG_BACKWARD);
 		if(err < 0)
-			DebugOutput("TFFmpegPacketer::SeekPos video ret %d", err);
+			TFFLog(TFF_LOG_LEVEL_DEBUG, "TFFmpegPacketer::SeekPos video ret %d", err);
 	}
 
 	ClearPktQueue(_audioQ);
 	if(_ctx->asIndex > 0)
 	{
 		apos = av_rescale_q(pos, timeBaseQ, _ctx->audioStream->time_base);
-		err = av_seek_frame(_ctx->pFmtCtx, _ctx->asIndex, apos, AVSEEK_FLAG_BACKWARD);
+		err = av_seek_frame(_ctx->fmtCtx, _ctx->asIndex, apos, AVSEEK_FLAG_BACKWARD);
 		if(err < 0)
-			DebugOutput("TFFmpegPacketer::SeekPos audio ret %d", err);
+			TFFLog(TFF_LOG_LEVEL_DEBUG, "TFFmpegPacketer::SeekPos audio ret %d", err);
 	}
 
 	_isFinished = FALSE;
@@ -109,7 +109,7 @@ unsigned long __stdcall TFFmpegPacketer::SThreadStart(void *p)
 
 void __stdcall TFFmpegPacketer::ThreadStart()
 {
-	DebugOutput("TFFmpegPacketer::Thread begin.");
+	TFFLog(TFF_LOG_LEVEL_DEBUG, "TFFmpegPacketer::Thread begin.");
 	int readRet = 0;
 	while(1)
 	{
@@ -125,7 +125,7 @@ void __stdcall TFFmpegPacketer::ThreadStart()
 
 		AVPacket *pkt = (AVPacket *)av_mallocz(sizeof(AVPacket));
 		av_init_packet(pkt);
-		readRet = av_read_frame(_ctx->pFmtCtx, pkt);
+		readRet = av_read_frame(_ctx->fmtCtx, pkt);
 		if(readRet >= 0)
 		{
 			if(pkt->stream_index == _ctx->vsIndex)
@@ -137,7 +137,7 @@ void __stdcall TFFmpegPacketer::ThreadStart()
 				PutIntoPktQueue(_subtitleQ, pkt);*/
 			else
 			{
-				//DebugOutput("TFFmpegPacketer::Thread drop packet.\n");
+				//TFFLog(TFF_LOG_LEVEL_DEBUG, "TFFmpegPacketer::Thread drop packet.\n");
 				av_free_packet(pkt);
 				av_free(pkt);
 			}
@@ -145,17 +145,17 @@ void __stdcall TFFmpegPacketer::ThreadStart()
 		else/* if(readRet == AVERROR_EOF)*/
 		{
 			av_free(pkt);
-			DebugOutput("TFFmpegPacketer::Thread to end of file.");
+			TFFLog(TFF_LOG_LEVEL_DEBUG, "TFFmpegPacketer::Thread to end of file.");
 			_isFinished = TRUE;
 			TFF_CondBroadcast(_videoQ->cond);
 			TFF_CondBroadcast(_audioQ->cond);
 			TFF_CondBroadcast(_subtitleQ->cond);
 			TFF_CondWait(_readCond, _readMutex);
-			DebugOutput("TFFmpegPacketer::Thread awake.");
+			TFFLog(TFF_LOG_LEVEL_DEBUG, "TFFmpegPacketer::Thread awake.");
 		}
 		TFF_ReleaseMutex(_readMutex);
 	}
-	DebugOutput("TFFmpegPacketer::Thread exit.");
+	TFFLog(TFF_LOG_LEVEL_DEBUG, "TFFmpegPacketer::Thread exit.");
 }
 
 int TFFmpegPacketer::GetVideoPacket(FFPacketList **pkt)
@@ -181,9 +181,9 @@ int TFFmpegPacketer::GetPacket(FFPacketQueue *q, FFPacketList **ppkt)
 	while(q->count == 0 &&
 		!_isFinished)
 	{
-		DebugOutput("Count of packet queue is 0 and not finished. Will wait for cond. Queue type %d", q->type);
+		TFFLog(TFF_LOG_LEVEL_DEBUG, "Count of packet queue is 0 and not finished. Will wait for cond. Queue type %d", q->type);
 		TFF_CondWait(q->cond, q->mutex);
-		DebugOutput("Got signal. Queue type %d", q->type);
+		TFFLog(TFF_LOG_LEVEL_DEBUG, "Got signal. Queue type %d", q->type);
 	}
 
 	if(q->count == 0 && _isFinished)

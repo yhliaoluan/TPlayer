@@ -20,10 +20,11 @@ public:
 	int Stop();
 	int Step();
 	int Seek(double);
-	int GetVideoInfo(FFSettings *);
+	int GetMediaInfo(FFSettings *);
 	int GetCurFrame();
 	int SetResolution(int w, int h);
 	int FillAudioStream(uint8_t *stream, int len);
+	int SetAudioOutputSetting(FFAudioSetting *setting);
 private:
 	FFContext *_ctx;
 	TFFmpegVideoDecoder *_videoDecoder;

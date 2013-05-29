@@ -6,6 +6,7 @@
 #include "TFFmpeg.h"
 #include "SDL.h"
 #include "SDL_opengl.h"
+#include "log.h"
 
 using std::cout;
 using std::cin;
@@ -13,17 +14,23 @@ using std::endl;
 
 #define CONTROL_HEIGHT 100
 #define SDL_AUDIO_BUFFER_SIZE 1024
+#define SDL_VIDEO_BPP 24
 
 typedef struct _st_PlayContext
 {
 	SDL_Surface *window;
 	SDL_Overlay *overlay;
+	SDL_Surface *video;
+	SDL_Surface *background;
 	void *handle; //player handle
 } SDLPlayerContext;
 
+void AllocSDLSurface(SDL_Surface **dst, int w, int h, SDL_Surface *src);
+void AllocSDLSurface(SDL_Surface **dst, SDL_Surface *src);
+
 static SDLPlayerContext *_context;
 
-void __stdcall NewFrame(FFFrame *p)
+static void HandleYUVFrame(FFFrame *p)
 {
 	SDL_Rect rect;
 	int err = SDL_LockYUVOverlay(_context->overlay);
@@ -36,6 +43,33 @@ void __stdcall NewFrame(FFFrame *p)
 	rect.w = p->width;
 	rect.h = p->height;
 	SDL_DisplayYUVOverlay(_context->overlay, &rect);
+}
+
+static void HandleRGB24Frame(FFFrame *p)
+{
+	SDL_Rect dstRect;
+	if(_context->video->w != p->width ||
+		_context->video->h != p->height)
+	{
+		AllocSDLSurface(&_context->video, p->width, p->height, _context->window);
+		SDL_BlitSurface(_context->background, NULL, _context->window, NULL);
+	}
+
+	dstRect.x = (_context->window->w - _context->video->w) >> 1;
+	dstRect.y = (_context->window->h - _context->video->h) >> 1;
+	dstRect.w = _context->video->w;
+	dstRect.h = _context->video->h;
+	SDL_LockSurface(_context->video);
+	memcpy(_context->video->pixels, p->data[0], p->linesize[0] * p->height);
+	SDL_UnlockSurface(_context->video);
+	SDL_BlitSurface(_context->video, NULL, _context->window, &dstRect);
+
+	SDL_Flip(_context->window);
+}
+
+void __stdcall NewFrame(FFFrame *p)
+{
+	HandleRGB24Frame(p);
 }
 
 void __stdcall Finished(void)
@@ -52,7 +86,12 @@ void AudioCallback(void *userdata, Uint8 *stream, int len)
 	FF_CopyAudioStream(context->handle, stream, len);
 }
 
-static int audio_open(void *opaque, int64_t wanted_channel_layout, int wanted_nb_channels, int wanted_sample_rate)
+static int audio_open(void *opaque,
+					  int64_t wanted_channel_layout,
+					  int wanted_nb_channels,
+					  int wanted_sample_rate,
+					  int64_t *obtainedChannelLayout,
+					  int *obtainedChannels)
 {
     SDL_AudioSpec wanted_spec, spec;
     const int next_nb_channels[] = {0, 0, 1, 6, 2, 6, 4, 6};
@@ -93,13 +132,37 @@ static int audio_open(void *opaque, int64_t wanted_channel_layout, int wanted_nb
         }
     }
 
+	if(obtainedChannelLayout)
+		*obtainedChannelLayout = wanted_channel_layout;
+	if(obtainedChannels)
+		*obtainedChannels = spec.channels;
+
     return spec.size;
+}
+
+static void AllocSDLSurface(SDL_Surface **dst, int w, int h, SDL_Surface *src)
+{
+	if(*dst)
+		SDL_FreeSurface(*dst);
+	*dst = SDL_CreateRGBSurface(SDL_HWSURFACE,
+		w,
+		h,
+		src->format->BitsPerPixel,
+		src->format->Rmask,
+		src->format->Gmask,
+		src->format->Bmask,
+		src->format->Amask);
+}
+
+static void AllocSDLSurface(SDL_Surface **dst, SDL_Surface *src)
+{
+	AllocSDLSurface(dst, src->w, src->h, src);
 }
 
 static int InitSDL(FFSettings *setting)
 {
 	int ret = 0;
-	ret = SDL_Init(SDL_INIT_EVERYTHING);
+	ret = SDL_Init(SDL_INIT_AUDIO | SDL_INIT_VIDEO);
 
 	if(ret >= 0)
 	{
@@ -114,28 +177,22 @@ static int InitSDL(FFSettings *setting)
 			w = 200;
 			h = 200;
 		}
-		_context->window = SDL_SetVideoMode(w, h, 0, SDL_HWSURFACE/* | SDL_RESIZABLE*/);
-		_context->overlay = SDL_CreateYUVOverlay(w, h, SDL_IYUV_OVERLAY, _context->window);
+		_context->window = SDL_SetVideoMode(w, h, SDL_VIDEO_BPP, SDL_HWSURFACE | SDL_RESIZABLE);
+		AllocSDLSurface(&_context->background, _context->window);
+		AllocSDLSurface(&_context->video, _context->window);
 		SDL_WM_SetCaption("SDL Player", NULL);
 	}
 
 	if(ret >= 0 && setting->a.valid)
 	{
-		SDL_AudioSpec wantedSpec;
-		wantedSpec.freq = setting->a.sampleRate;
-		wantedSpec.format = AUDIO_S16SYS;
-		wantedSpec.channels = setting->a.channels;
-		wantedSpec.silence = 0;
-		wantedSpec.samples = SDL_AUDIO_BUFFER_SIZE;
-		wantedSpec.callback = AudioCallback;
-		wantedSpec.userdata = _context;
-
-		SDL_AudioSpec spec;
-		ret = SDL_OpenAudio(&wantedSpec, &spec);
-
-		if(ret < 0)
+		int channels;
+		ret = audio_open(_context, 0, setting->a.channels, setting->a.sampleRate,
+			NULL, &channels);
+		if(ret >= 0 && channels != setting->a.channels)
 		{
-			printf("%s\n", SDL_GetError());
+			FFAudioSetting setting = {-1};
+			setting.channels = channels;
+			FF_SetAudioOutputSetting(_context->handle, &setting);
 		}
 	}
 
@@ -151,14 +208,28 @@ static DWORD WINAPI InputThread(void *)
 	SDL_Event event;
 	while(std::getline(cin, s))
 	{
-		
 		if(s.compare("q") == 0)
 		{
 			event.type = SDL_QUIT;
 			SDL_PushEvent(&event);
 			break;
 		}
-		printf("Unrecognize command '%s'\n", s.c_str());
+		else if(s.compare("p") == 0)
+		{
+			FF_Pause(_context->handle);
+			SDL_PauseAudio(1);
+		}
+		else if(s.compare("step") == 0)
+		{
+			FF_ReadNextFrame(_context->handle);
+		}
+		else if(s.compare("r") == 0)
+		{
+			FF_Run(_context->handle);
+			SDL_PauseAudio(0);
+		}
+		else
+			printf("Unrecognize command '%s'\n", s.c_str());
 	}
 	printf("Input thread exit.\n");
 	return 0;
@@ -169,6 +240,10 @@ static void LoopEvents(FFSettings *pSettings, void *handle)
 	BOOL running = TRUE;
 
 	SDL_Event event;
+	int w, h;
+	double r, srcR;
+	if(pSettings->v.valid)
+		srcR = pSettings->v.width / (double)pSettings->v.height;
 	while(running && SDL_WaitEvent(&event))
 	{
 		switch(event.type)
@@ -176,23 +251,23 @@ static void LoopEvents(FFSettings *pSettings, void *handle)
 		case SDL_QUIT:
 			running = FALSE;
 			break;
-			//TODO: handle resize event.
 		case SDL_VIDEORESIZE:
-			/*w = event.resize.w;
-			h = event.resize.h;
-			r = w / (double)h;
-			if(r > srcR)
-				w = (int)(h * srcR + 0.5);
-			else if(r < srcR)
-				h = (int)(w / srcR + 0.5);
-			if(w % 2 != 0)
-				w -= 1;
-			if(h % 2 != 0)
-				h -= 1;
-			cout << "Resize w:" << w << " h:" << h << endl;
-			FF_SetResolution(handle, w, h);*/
+			SDL_SetVideoMode(event.resize.w, event.resize.h, SDL_VIDEO_BPP, SDL_HWSURFACE | SDL_RESIZABLE);
+			AllocSDLSurface(&_context->background, _context->window);
+			if(pSettings->v.valid)
+			{
+				w = event.resize.w;
+				h = event.resize.h;
+				r = w / (double)h;
+				if(r > srcR)
+					w = (int)(h * srcR + 0.5);
+				else if(r < srcR)
+					h = (int)(w / srcR + 0.5);
+				w &= ~3;
+				FF_SetResolution(handle, w, h);
+			}
 			break;
-			//TODO: shorcuts, full screen etc...
+			//TODO: shortcuts, full screen etc...
 		case SDL_KEYDOWN:
 			break;
 		default:
@@ -201,35 +276,46 @@ static void LoopEvents(FFSettings *pSettings, void *handle)
 	}
 }
 
+static int InitTFFPlayer(wchar_t *file, FFSettings *setting, void **handle)
+{
+	int err = FF_Init();
+	if(err >= 0)
+	{
+		FFInitSetting initSetting = {0};
+		wcscpy_s(initSetting.fileName, file);
+		initSetting.framePixFmt = FF_FRAME_PIXFORMAT_RGB24;
+		initSetting.sampleFmt = FF_AUDIO_SAMPLE_FMT_S16;
+		initSetting.audioDisable = 0;
+		initSetting.videoDisable = 0;
+		initSetting.useExternalClock = 1;
+		err = FF_InitHandle(&initSetting, setting, handle);
+	}
+
+	if(err >= 0)
+	{
+		err = FF_SetCallback(*handle, NewFrame, Finished);
+	}
+
+	if(err < 0)
+		FF_CloseHandle(*handle);
+
+	return err;
+}
+
 int player(int argc, wchar_t *argv[])
 {
 	void *handle;
 	FFSettings settings;
 	char msg[MAX_PATH] = {0};
 
-	int err = FF_Init();
-	if(err >= 0)
-	{
-		FFInitSetting initSetting = {0};
-		wcscpy_s(initSetting.fileName, argv[1]);
-		initSetting.framePixFmt = FF_FRAME_PIXFORMAT_YUV420;
-		initSetting.audioDisable = 0;
-		initSetting.videoDisable = 0;
-		initSetting.useExternalClock = 1;
-		err = FF_InitHandle(&initSetting, &settings, &handle);
-	}
-
-	if(err >= 0)
-	{
-		err = FF_SetCallback(handle, NewFrame, Finished);
-	}
+	int err = InitTFFPlayer(argv[1], &settings, &handle);
 
 	if(err >= 0)
 	{
 		_context = (SDLPlayerContext *)malloc(sizeof(SDLPlayerContext));
 		memset(_context, 0, sizeof(SDLPlayerContext));
-		err = InitSDL(&settings);
 		_context->handle = handle;
+		err = InitSDL(&settings);
 	}
 
 	if(err >= 0)
@@ -260,6 +346,10 @@ int player(int argc, wchar_t *argv[])
 				SDL_FreeSurface(_context->window);
 			if(_context->overlay)
 				SDL_FreeYUVOverlay(_context->overlay);
+			if(_context->video)
+				SDL_FreeSurface(_context->video);
+			if(_context->background)
+				SDL_FreeSurface(_context->background);
 
 			free(_context);
 			_context = NULL;
@@ -280,15 +370,10 @@ int testDecodeSubtitle(wchar_t *file)
 	AVSubtitle subtitle;
 	wchar_t info[1024] = {0};
 	av_register_all();
-
 	WideCharToMultiByte(CP_UTF8, 0, file, -1, szFile, MAX_PATH, NULL, NULL);
-
 	avformat_open_input(&ctx, szFile, NULL, NULL);
-
 	av_find_stream_info(ctx);
-
 	av_dump_format(ctx, 0, szFile, 0);
-
 	subtitleIndex = av_find_best_stream(ctx, AVMEDIA_TYPE_SUBTITLE, -1, -1, NULL, 0);
 
 	if(subtitleIndex < 0)
@@ -394,6 +479,7 @@ void SDLTest()
 
 int wmain(int argc, wchar_t *argv[])
 {
+	TFFLogInit("D:\\playerlog\\log.txt");
 	player(argc, argv);
 	//SDLTest();
 	return 0;

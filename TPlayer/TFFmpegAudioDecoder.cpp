@@ -6,7 +6,8 @@ TFFmpegAudioDecoder::TFFmpegAudioDecoder(FFContext *ctx, TFFmpegPacketer *pPkter
 	_outBuffer(NULL),
 	_outSize(0),
 	_rawFrames(NULL),
-	_decFrame(NULL)
+	_decFrame(NULL),
+	_outputSettingChanged(0)
 {
 	_ctx = ctx;
 	_pkter = pPkter;
@@ -31,12 +32,33 @@ TFFmpegAudioDecoder::~TFFmpegAudioDecoder()
 	}
 }
 
-int TFFmpegAudioDecoder::Init(void)
+int TFFmpegAudioDecoder::SetOutputSetting(FFAudioSetting *setting)
 {
-	_channelLayout = _ctx->channelLayout;
-	_sampleRate = _ctx->freq;
-	_sampleFmt = (int)_ctx->sampleFmt;
+	if(!setting)
+		return FF_ERR_NOPOINTER;
+	if(setting->channelLayout > 0)
+		_outputSetting.channelLayout = setting->channelLayout;
+	if(setting->channels > 0)
+		_outputSetting.channels = setting->channels;
+	if(setting->freq > 0)
+		_outputSetting.freq = setting->freq;
+	if(setting->sampleFmt >= 0)
+		_outputSetting.sampleFmt = setting->sampleFmt;
+	_outputSettingChanged = 1;
 	return 0;
+}
+
+int TFFmpegAudioDecoder::GetOutputSetting(FFAudioSetting *setting)
+{
+	if(!setting)
+		return FF_ERR_NOPOINTER;
+	*setting = _outputSetting;
+	return FF_OK;
+}
+
+int TFFmpegAudioDecoder::Init()
+{
+	return FF_OK;
 }
 
 int TFFmpegAudioDecoder::Fill(uint8_t *stream, int len, int64_t *pts)
@@ -50,7 +72,7 @@ int TFFmpegAudioDecoder::Fill(uint8_t *stream, int len, int64_t *pts)
 		{
 			if(Decode() < 0)
 			{
-				DebugOutput("Audio decoder go to the end of file.");
+				TFFLog(TFF_LOG_LEVEL_DEBUG, "Audio decoder go to the end of file.");
 				ret = FF_EOF;
 				memset(stream, 0, len);
 				break;
@@ -79,35 +101,35 @@ int TFFmpegAudioDecoder::Fill(uint8_t *stream, int len, int64_t *pts)
 	return ret;
 }
 
-void TFFmpegAudioDecoder::AllocCtxIfNeeded(const AVFrame *frame)
+int TFFmpegAudioDecoder::AllocCtxIfNeeded(const AVFrame *frame)
 {
-	int64_t decChannelLayout =
-		(frame->channel_layout && av_frame_get_channels(frame) == av_get_channel_layout_nb_channels(frame->channel_layout)) ?
-		frame->channel_layout : av_get_default_channel_layout(av_frame_get_channels(frame));
+	int64_t decChannelLayout;
+	int ret;
 
-	if(_channelLayout != decChannelLayout ||
-		_sampleRate != frame->sample_rate ||
-		_sampleFmt != frame->format)
+	if(_outputSettingChanged)
 	{
-		DebugOutput("Alloc swr context. from %I64d channel layout, %d format, %d freq to %I64d channel layout, %d format, %d freq",
+		decChannelLayout = 
+			(frame->channel_layout && av_frame_get_channels(frame) == av_get_channel_layout_nb_channels(frame->channel_layout)) ?
+			frame->channel_layout : av_get_default_channel_layout(av_frame_get_channels(frame));
+
+		TFFLog(TFF_LOG_LEVEL_INFO, "Alloc swr context. from %I64d channel layout, %d format, %d freq to %I64d channel layout, %d format, %d freq",
 			decChannelLayout, frame->format, frame->sample_rate,
-			_ctx->channelLayout, (int)_ctx->sampleFmt, _ctx->freq);
+			_outputSetting.channelLayout, (int)_outputSetting.sampleFmt, _outputSetting.freq);
 		swr_free(&_swr);
 		_swr = swr_alloc_set_opts(NULL,
-				_ctx->channelLayout, (AVSampleFormat)_ctx->sampleFmt, _ctx->freq,
+				_outputSetting.channelLayout, (AVSampleFormat)_outputSetting.sampleFmt, _outputSetting.freq,
 				decChannelLayout, (AVSampleFormat)frame->format, frame->sample_rate,
 				0, NULL);
 
-		if(!_swr || swr_init(_swr) < 0)
+		if(!_swr || (ret = swr_init(_swr)) < 0)
 		{
-			DebugOutput("Cannot init swr context.");
-			return;
+			TFFLog(TFF_LOG_LEVEL_ERROR, "Cannot init swr context.");
+			return -1;
 		}
 
-		_channelLayout = decChannelLayout;
-		_sampleRate = frame->sample_rate;
-		_sampleFmt = frame->format;
+		_outputSettingChanged = 0;
 	}
+	return FF_OK;
 }
 
 int TFFmpegAudioDecoder::Decode()
@@ -134,15 +156,15 @@ int TFFmpegAudioDecoder::Decode()
 					pkt->pkt);
 				if(len1 < 0)
 				{
-					DebugOutput("avcodec_decode_audio4 ret %d", len1);
+					TFFLog(TFF_LOG_LEVEL_WARNING, "Decode audio ret %d", len1);
 					break;
 				}
 				pkt->pkt->data += len1;
 				pkt->pkt->size -= len1;
 				if(!gotFrame)
 					continue;
-				AllocCtxIfNeeded(_decFrame);
-				CopyData(_decFrame, pkt->pkt);
+				if(AllocCtxIfNeeded(_decFrame) >= 0)
+					CopyData(_decFrame, pkt->pkt);
 			}
 			_pkter->FreeSinglePktList(&pkt);
 		}
@@ -162,7 +184,6 @@ int TFFmpegAudioDecoder::CopyData(AVFrame *frame, AVPacket *pkt)
 	uint8_t *from;
 	const uint8_t **in;
 	uint8_t **out;
-	AVRational tb = { 1, frame->sample_rate };
 
 	if(_swr)
 	{
@@ -171,13 +192,13 @@ int TFFmpegAudioDecoder::CopyData(AVFrame *frame, AVPacket *pkt)
 		minSize  = av_samples_get_buffer_size(NULL,
 			av_frame_get_channels(frame),
 			s,
-			(AVSampleFormat)_ctx->sampleFmt,
+			(AVSampleFormat)_outputSetting.sampleFmt,
 			0);
 		av_fast_malloc(&_outBuffer, &_outSize, minSize);
 		out = &_outBuffer;
 		samples = swr_convert(_swr, out, s, in, frame->nb_samples);
 		from = _outBuffer;
-		dataSize = samples * av_frame_get_channels(frame) * av_get_bytes_per_sample(_ctx->sampleFmt);
+		dataSize = samples * av_frame_get_channels(frame) * av_get_bytes_per_sample(_outputSetting.sampleFmt);
 	}
 	else
 	{
@@ -185,7 +206,7 @@ int TFFmpegAudioDecoder::CopyData(AVFrame *frame, AVPacket *pkt)
 					NULL,
 					av_frame_get_channels(frame),
 					frame->nb_samples,
-					_ctx->sampleFmt, 1);
+					_ctx->audioStream->codec->sample_fmt, 1);
 		from = frame->data[0];
 	}
 

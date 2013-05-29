@@ -13,3 +13,4 @@ FF_Pause
 FF_Stop
 FF_SetResolution
 FF_CopyAudioStream
+FF_SetAudioOutputSetting

@@ -56,7 +56,7 @@
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <PreprocessorDefinitions>WIN32;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..\Dependency\ffmpeg\include;..\Dependency\common\include</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\Dependency\ffmpeg\include;..\Dependency\common\include;..\Util</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -116,6 +116,11 @@
     <ClInclude Include="TFFmpegPlayer.h" />
     <ClInclude Include="TFFmpegUtil.h" />
     <ClInclude Include="TFFmpegWin32.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Util\Util.vcxproj">
+      <Project>{492ecc9f-a7e5-4971-b9cb-4a9237ec03d5}</Project>
+    </ProjectReference>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

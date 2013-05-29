@@ -73,6 +73,8 @@ typedef struct _st_FFSettings
 		int valid;
 		int sampleRate;
 		int channels;
+		int freq;
+		int64_t channelLayout;
 	} a;
 } FFSettings;
 
@@ -88,6 +90,9 @@ typedef struct _st_FFInitSetting
 	wchar_t fileName[260];
 	int framePixFmt;
 	int sampleFmt;
+	int channels;
+	int64_t channelLayout;
+	int sampleRate;
 	int useExternalClock;//if set to 0. the video will play as fast as possible
 	int audioDisable;
 	int videoDisable;
@@ -110,23 +115,29 @@ typedef void (__stdcall *FinishedCB)(void);
 
 typedef struct _st_FFContext
 {
-	AVFormatContext *pFmtCtx;
+	AVFormatContext *fmtCtx;
 	AVStream *videoStream;
 	AVStream *audioStream;
 	int vsIndex; //video stream index
 	int asIndex; //audio stream index
 	int ssIndex; //subtitle stream index
 
-	//video settings
+} FFContext;
+
+typedef struct _st_FFAudioSetting
+{
+	int64_t channelLayout;
+	int channels;
+	int freq;
+	enum AVSampleFormat sampleFmt;
+} FFAudioSetting;
+
+typedef struct _st_FFVideoSetting
+{
 	enum AVPixelFormat pixFmt;
 	int width;
 	int height;
-
-	//audio settings
-	int64_t channelLayout;
-	int freq;
-	enum AVSampleFormat sampleFmt;
-} FFContext;
+} FFVideoSetting;
 
 #define FF_OK								0
 #define FF_EOF								2

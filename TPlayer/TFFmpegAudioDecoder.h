@@ -15,7 +15,9 @@ public:
 	TFFmpegAudioDecoder(FFContext *, TFFmpegPacketer *);
 	~TFFmpegAudioDecoder();
 
-	int Init(void);
+	int Init();
+	int SetOutputSetting(FFAudioSetting *setting);
+	int GetOutputSetting(FFAudioSetting *setting);
 
 	//fill stream with length len and out put pts in millisecond
 	int Fill(uint8_t *stream, int len, int64_t *pts);
@@ -23,9 +25,9 @@ private:
 	FFContext *_ctx;
 	TFFmpegPacketer *_pkter;
 	SwrContext *_swr;
-	int64_t _channelLayout;
-	int _sampleRate;
-	int _sampleFmt;
+
+	FFAudioSetting _outputSetting;
+	int _outputSettingChanged;
 
 	uint8_t *_outBuffer;
 	size_t _outSize;
@@ -43,7 +45,7 @@ private:
 	AVFrame *_decFrame;
 
 	int Decode();
-	void AllocCtxIfNeeded(const AVFrame *);
+	int AllocCtxIfNeeded(const AVFrame *);
 	int CopyData(AVFrame *frame, AVPacket *pkt);
 };
 
