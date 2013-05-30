@@ -42,7 +42,11 @@ int TFFmpegAudioDecoder::SetOutputSetting(FF_AUDIO_SETTING *setting)
 	if (setting->channelLayout > 0)
 		_outputSetting.channelLayout = setting->channelLayout;
 	if (setting->channels > 0)
+	{
 		_outputSetting.channels = setting->channels;
+		if(setting->channelLayout <= 0)
+			_outputSetting.channelLayout = av_get_default_channel_layout(_outputSetting.channels);
+	}
 	if (setting->freq > 0)
 		_outputSetting.freq = setting->freq;
 	if (setting->sampleFmt >= 0)

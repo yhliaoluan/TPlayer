@@ -190,8 +190,9 @@ static int InitSDL(FF_SETTINGS *setting)
 			NULL, &channels);
 		if (ret >= 0 && channels != setting->a.channels)
 		{
-			FF_AUDIO_SETTING setting = {-1};
+			FF_AUDIO_SETTING setting = {-1, -1, -1};
 			setting.channels = channels;
+			setting.sampleFmt = AV_SAMPLE_FMT_S16;
 			FF_SetAudioOutputSetting(_context->handle, &setting);
 		}
 	}
