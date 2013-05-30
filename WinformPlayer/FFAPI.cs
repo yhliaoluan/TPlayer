@@ -9,7 +9,7 @@ namespace WinformPlayer
     public delegate void OnFinished();
 
     [StructLayout(LayoutKind.Sequential)]
-    public struct FFSettings
+    public struct FF_SETTINGS
     {
         [MarshalAs(UnmanagedType.I4)]
         public int width;
@@ -40,7 +40,7 @@ namespace WinformPlayer
     }
 
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
-    public struct FFInitSetting
+    public struct FF_INIT_SETTING
     {
         [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 260)]
         public string fileName;
@@ -50,7 +50,7 @@ namespace WinformPlayer
     }
 
     [StructLayout(LayoutKind.Sequential)]
-    public struct FFFrame : IDisposable
+    public struct FF_FRAME : IDisposable
     {
         public IntPtr buff;
 
@@ -96,8 +96,8 @@ namespace WinformPlayer
         public static extern int FF_Init();
 
         [DllImport("TPlayer.dll", CharSet = CharSet.Unicode)]
-        public static extern int FF_InitFile(ref FFInitSetting setting,
-            out FFSettings settings,
+        public static extern int FF_InitFile(ref FF_INIT_SETTING setting,
+            out FF_SETTINGS settings,
             out IntPtr handle);
 
         [DllImport("TPlayer.dll", CharSet = CharSet.Unicode)]

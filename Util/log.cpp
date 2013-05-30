@@ -13,11 +13,11 @@ static char _fmt[960] = {0};
 
 int __stdcall TFFLogInit(const char *file)
 {
-	if(_f)
+	if (_f)
 		return 0;
 	strcpy_s(_file, 260, file);
 	_f = _fsopen(_file, "a", _SH_DENYWR);
-	if(_f)
+	if (_f)
 		return 0;
 	return -1;
 }

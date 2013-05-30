@@ -13,20 +13,20 @@ public:
 	TFFmpegPlayer();
 	virtual ~TFFmpegPlayer();
 	int SetCB(NewFrameCB, FinishedCB);
-	int Init(const FFInitSetting *pSetting);
+	int Init(const FF_INIT_SETTING *pSetting);
 	int Start();
 	int Run();
 	int Pause();
 	int Stop();
 	int Step();
 	int Seek(double);
-	int GetMediaInfo(FFSettings *);
+	int GetMediaInfo(FF_SETTINGS *);
 	int GetCurFrame();
 	int SetResolution(int w, int h);
 	int FillAudioStream(uint8_t *stream, int len);
-	int SetAudioOutputSetting(FFAudioSetting *setting);
+	int SetAudioOutputSetting(FF_AUDIO_SETTING *setting);
 private:
-	FFContext *_ctx;
+	FF_CONTEXT *_ctx;
 	TFFmpegVideoDecoder *_videoDecoder;
 	TFFmpegAudioDecoder *_audioDecoder;
 	TFFmpegPacketer *_pkter;
@@ -61,15 +61,15 @@ private:
 
 	static unsigned long __stdcall SThreadStart(void *);
 	void ThreadStart(void);
-	int InitCtx(const FFInitSetting *pSetting);
-	inline void OnNewFrame(IN FFFrame *);
+	int InitCtx(const FF_INIT_SETTING *pSetting);
+	inline void OnNewFrame(IN FF_FRAME *);
 	void OnFinished(int type);
 	void FreeCtx(void);
 	void Uninit(void);
 	int OpenVideoCodec(void);
 	int OpenAudioCodec(void);
-	inline int Convert(FFVideoFrame *, FFFrame *);
-	inline void SyncVideo(FFFrame *);
+	inline int Convert(FF_VIDEO_FRAME *, FF_FRAME *);
+	inline void SyncVideo(FF_FRAME *);
 	inline void CmdAndSignal(int);
 };
 #endif

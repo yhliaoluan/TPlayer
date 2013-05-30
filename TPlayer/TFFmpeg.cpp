@@ -17,8 +17,8 @@ int __stdcall FF_Uninit()
 	return 0;
 }
 
-int __stdcall FF_InitHandle(const FFInitSetting *pInitSetting,
-						  OUT FFSettings *pSettings,
+int __stdcall FF_InitHandle(const FF_INIT_SETTING *pInitSetting,
+						  OUT FF_SETTINGS *pSettings,
 						  OUT void **ppHandle)
 {
 	int ret = 0;
@@ -26,10 +26,10 @@ int __stdcall FF_InitHandle(const FFInitSetting *pInitSetting,
 
 	player = new TFFmpegPlayer();
 	ret = player->Init(pInitSetting);
-	if(ret < 0)
+	if (ret < 0)
 		goto err_end;
 
-	if(pSettings)
+	if (pSettings)
 		player->GetMediaInfo(pSettings);
 
 	player->Start();
@@ -93,7 +93,7 @@ int __stdcall FF_GetCurFrame(void *p)
 int __stdcall FF_CloseHandle(void *p)
 {
 	TFFmpegPlayer *player = (TFFmpegPlayer *)p;
-	if(player)
+	if (player)
 		delete player;
 
 	return 0;
@@ -114,7 +114,7 @@ int __stdcall FF_ScalePrepared(int srcW,
 		PIX_FMT_BGR24,
 		SWS_POINT, NULL, NULL, NULL);
 
-	if(!context)
+	if (!context)
 		return -1;
 
 	*ppCtx = context;
@@ -142,7 +142,7 @@ int __stdcall FF_Scale(void *pCtx,
 int __stdcall FF_SetResolution(void *p, int width, int height)
 {
 	TFFmpegPlayer *player = (TFFmpegPlayer *)p;
-	if(player)
+	if (player)
 		return player->SetResolution(width, height);
 	return 0;
 }
@@ -150,15 +150,15 @@ int __stdcall FF_SetResolution(void *p, int width, int height)
 int __stdcall FF_CopyAudioStream(void *p, uint8_t *stream, int len)
 {
 	TFFmpegPlayer *player = (TFFmpegPlayer *)p;
-	if(player)
+	if (player)
 		return player->FillAudioStream(stream, len);
 	return 0;
 }
 
-int __stdcall FF_SetAudioOutputSetting(void *p, FFAudioSetting *setting)
+int __stdcall FF_SetAudioOutputSetting(void *p, FF_AUDIO_SETTING *setting)
 {
 	TFFmpegPlayer *player = (TFFmpegPlayer *)p;
-	if(player)
+	if (player)
 		return player->SetAudioOutputSetting(setting);
 	return FF_OK;
 }

@@ -1,7 +1,7 @@
 #include "TFFmpegVideoDecoder.h"
 #include "TFFmpegUtil.h"
 
-TFFmpegVideoDecoder::TFFmpegVideoDecoder(FFContext *p, TFFmpegPacketer *pPkter) :
+TFFmpegVideoDecoder::TFFmpegVideoDecoder(FF_CONTEXT *p, TFFmpegPacketer *pPkter) :
 	_swsCtx(NULL),
 	_decFrame(NULL),
 	_outputSettingChanged(0),
@@ -12,14 +12,14 @@ TFFmpegVideoDecoder::TFFmpegVideoDecoder(FFContext *p, TFFmpegPacketer *pPkter) 
 }
 TFFmpegVideoDecoder::~TFFmpegVideoDecoder()
 {
-	if(_swsCtx)
+	if (_swsCtx)
 	{
 		sws_freeContext(_swsCtx);
 		_swsCtx = NULL;
 	}
-	if(_decFrame)
+	if (_decFrame)
 		avcodec_free_frame(&_decFrame);
-	if(_settingMutex)
+	if (_settingMutex)
 	{
 		TFF_CloseMutex(_settingMutex);
 		_settingMutex = NULL;
@@ -34,7 +34,7 @@ int TFFmpegVideoDecoder::Init()
 
 int TFFmpegVideoDecoder::AllocSwrContextIfNeeded(AVFrame *frame)
 {
-	if(_outputSettingChanged)
+	if (_outputSettingChanged)
 	{
 		TFF_GetMutex(_settingMutex, TFF_INFINITE);
 		TFFLog(TFF_LOG_LEVEL_INFO, "Alloc sws context. from %d width, %d height, %d pixel format to %d width, %d height, %d pixel format.",
@@ -57,14 +57,14 @@ int TFFmpegVideoDecoder::AllocSwrContextIfNeeded(AVFrame *frame)
 	return 0;
 }
 
-int TFFmpegVideoDecoder::SetOutputSetting(FFVideoSetting *setting)
+int TFFmpegVideoDecoder::SetOutputSetting(FF_VIDEO_SETTING *setting)
 {
 	TFF_GetMutex(_settingMutex, TFF_INFINITE);
-	if(setting->width > 0)
+	if (setting->width > 0)
 		_outputSetting.width = setting->width;
-	if(setting->height > 0)
+	if (setting->height > 0)
 		_outputSetting.height = setting->height;
-	if(setting->pixFmt >= 0)
+	if (setting->pixFmt >= 0)
 		_outputSetting.pixFmt = setting->pixFmt;
 	_outputSettingChanged = 1;
 	TFF_ReleaseMutex(_settingMutex);
@@ -74,7 +74,7 @@ int TFFmpegVideoDecoder::SetOutputSetting(FFVideoSetting *setting)
 int TFFmpegVideoDecoder::SetResolution(int width, int height)
 {
 	TFF_GetMutex(_settingMutex, TFF_INFINITE);
-	if(_outputSetting.width != width ||
+	if (_outputSetting.width != width ||
 		_outputSetting.height != height)
 	{
 		_outputSetting.width = width;
@@ -85,31 +85,31 @@ int TFFmpegVideoDecoder::SetResolution(int width, int height)
 	return 0;
 }
 
-int TFFmpegVideoDecoder::Decode(FFVideoFrame *frame)
+int TFFmpegVideoDecoder::Decode(FF_VIDEO_FRAME *frame)
 {
-	FFPacketList *pktList = NULL;
+	FF_PACKET_LIST *pktList = NULL;
 	int gotPic = 0;
 	int ret = FF_OK;
 	int w, h;
 	AVPixelFormat fmt;
-	if(!frame)
+	if (!frame)
 	{
 		ret = FF_ERR_NOPOINTER;
 		return ret;
 	}
-	while(!gotPic)
+	while (!gotPic)
 	{
-		if(_pkter->GetVideoPacket(&pktList) >= 0)
+		if (_pkter->GetVideoPacket(&pktList) >= 0)
 		{
 			AVPacket *pkt = (AVPacket *)pktList->pkt;
-			if(_decFrame)
+			if (_decFrame)
 				avcodec_get_frame_defaults(_decFrame);
 			else
 				_decFrame = avcodec_alloc_frame();
 
 			avcodec_decode_video2(_ctx->videoStream->codec,
 				_decFrame, &gotPic, pkt);
-			if(gotPic)
+			if (gotPic)
 			{
 				TFF_GetMutex(_settingMutex, TFF_INFINITE);
 				w = _outputSetting.width;
@@ -145,12 +145,12 @@ int TFFmpegVideoDecoder::Decode(FFVideoFrame *frame)
 	return ret;
 }
 
-int TFFmpegVideoDecoder::Free(FFVideoFrame *frame)
+int TFFmpegVideoDecoder::Free(FF_VIDEO_FRAME *frame)
 {
 	int ret = FF_OK;
-	if(frame->frame)
+	if (frame->frame)
 		avcodec_free_frame(&frame->frame);
-	if(frame->buffer)
+	if (frame->buffer)
 		av_free(frame->buffer);
 	return ret;
 }

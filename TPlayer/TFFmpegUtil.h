@@ -10,7 +10,7 @@
 static inline void
 CloseThreadP(TFF_Thread *thread)
 {
-	if(*thread)
+	if (*thread)
 	{
 		TFF_CloseThread(*thread);
 		*thread = NULL;
@@ -20,7 +20,7 @@ CloseThreadP(TFF_Thread *thread)
 static inline void
 CloseMutexP(TFF_Mutex *mutex)
 {
-	if(*mutex)
+	if (*mutex)
 	{
 		TFF_CloseMutex(*mutex);
 		*mutex = NULL;
@@ -30,7 +30,7 @@ CloseMutexP(TFF_Mutex *mutex)
 static inline void
 CloseEventP(TFF_Event *event)
 {
-	if(*event)
+	if (*event)
 	{
 		TFF_CloseEvent(*event);
 		*event = NULL;

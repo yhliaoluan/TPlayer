@@ -12,21 +12,21 @@ extern "C"
 class TFFmpegAudioDecoder
 {
 public:
-	TFFmpegAudioDecoder(FFContext *, TFFmpegPacketer *);
+	TFFmpegAudioDecoder(FF_CONTEXT *, TFFmpegPacketer *);
 	~TFFmpegAudioDecoder();
 
 	int Init();
-	int SetOutputSetting(FFAudioSetting *setting);
-	int GetOutputSetting(FFAudioSetting *setting);
+	int SetOutputSetting(FF_AUDIO_SETTING *setting);
+	int GetOutputSetting(FF_AUDIO_SETTING *setting);
 
 	//fill stream with length len and out put pts in millisecond
 	int Fill(uint8_t *stream, int len, int64_t *pts);
 private:
-	FFContext *_ctx;
+	FF_CONTEXT *_ctx;
 	TFFmpegPacketer *_pkter;
 	SwrContext *_swr;
 
-	FFAudioSetting _outputSetting;
+	FF_AUDIO_SETTING _outputSetting;
 	int _outputSettingChanged;
 
 	uint8_t *_outBuffer;

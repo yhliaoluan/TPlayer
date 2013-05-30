@@ -6,23 +6,23 @@
 class TFFmpegPacketer
 {
 public:
-	TFFmpegPacketer(FFContext *);
+	TFFmpegPacketer(FF_CONTEXT *);
 	virtual ~TFFmpegPacketer();
 	int Start();
-	int GetVideoPacket(FFPacketList **pkt);
-	int GetAudioPacket(FFPacketList **pkt);
-	int GetSubtitlePacket(FFPacketList **pkt);
-	int FreeSinglePktList(FFPacketList **pkt);
+	int GetVideoPacket(FF_PACKET_LIST **pkt);
+	int GetAudioPacket(FF_PACKET_LIST **pkt);
+	int GetSubtitlePacket(FF_PACKET_LIST **pkt);
+	int FreeSinglePktList(FF_PACKET_LIST **pkt);
 	int Init();
 	int SeekPos(double);
 private:
 	TFF_Thread _thread;
 	TFF_Cond _readCond;
 	TFF_Mutex _readMutex;
-	FFPacketQueue *_videoQ;
-	FFPacketQueue *_audioQ;
-	FFPacketQueue *_subtitleQ;
-	FFContext *_ctx;
+	FF_PACKET_QUEUE *_videoQ;
+	FF_PACKET_QUEUE *_audioQ;
+	FF_PACKET_QUEUE *_subtitleQ;
+	FF_CONTEXT *_ctx;
 	BOOL _isFinished;
 
 #define PKT_Q_VIDEO			1
@@ -35,12 +35,12 @@ private:
 
 	//put 
 	int PutIntoPktQueue(
-		FFPacketQueue *q,
+		FF_PACKET_QUEUE *q,
 		AVPacket *pkt);
-	int GetPacket(FFPacketQueue *, FFPacketList **);
-	int ClearPktQueue(FFPacketQueue *q);
-	int DestroyPktQueue(FFPacketQueue **);
-	int InitPacketQueue(FFPacketQueue **, int type);
+	int GetPacket(FF_PACKET_QUEUE *, FF_PACKET_LIST **);
+	int ClearPktQueue(FF_PACKET_QUEUE *q);
+	int DestroyPktQueue(FF_PACKET_QUEUE **);
+	int InitPacketQueue(FF_PACKET_QUEUE **, int type);
 	void __stdcall ThreadStart();
 	static unsigned long __stdcall SThreadStart(void *);
 };

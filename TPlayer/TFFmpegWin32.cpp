@@ -13,7 +13,7 @@ TFF_Cond TFF_CreateCondWin32()
 
 int TFF_DestroyCondWin32(TFF_Cond *cv)
 {
-	if(*cv)
+	if (*cv)
 	{
 		DeleteCriticalSection(&(*cv)->mutex);
 		CloseHandle((*cv)->semaWait);
@@ -38,17 +38,17 @@ int TFF_WaitCondTimeoutWin32(TFF_Cond cv, TFF_Mutex mutex, unsigned long timeout
 	LeaveCriticalSection(&cv->mutex);
 
 	//release mutex and wait on semaphore
-	if(timeout == TFF_INFINITE)
+	if (timeout == TFF_INFINITE)
 		ret = SignalObjectAndWait(mutex, cv->semaWait, INFINITE, FALSE);
 	else
 		ret = SignalObjectAndWait(mutex, cv->semaWait, timeout, FALSE);
 
 	EnterCriticalSection(&cv->mutex);
-	if(cv->signals > 0)
+	if (cv->signals > 0)
 	{
 		//if there is a signal and the thread is awake because of timeout
 		//we need eat a conditional signal
-		if(ret > 0)
+		if (ret > 0)
 			WaitForSingleObject(cv->semaWait, INFINITE);
 		cv->signals--;
 	}
@@ -62,13 +62,13 @@ int TFF_WaitCondTimeoutWin32(TFF_Cond cv, TFF_Mutex mutex, unsigned long timeout
 int TFF_BroadcastCondWin32(TFF_Cond cv)
 {
 	EnterCriticalSection(&cv->mutex);
-	if(cv->waiters > cv->signals)
+	if (cv->waiters > cv->signals)
 	{
 		int num = cv->waiters - cv->signals;
 		cv->signals = cv->waiters;
 		ReleaseSemaphore(cv->semaWait, num, NULL);
 		LeaveCriticalSection(&cv->mutex);
-		for(int i = 0; i < num; i++)
+		for (int i = 0; i < num; i++)
 			WaitForSingleObject(cv->semaDone, INFINITE);
 	}
 	else

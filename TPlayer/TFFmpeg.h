@@ -8,8 +8,8 @@
 
 int __stdcall FF_Init();
 
-int __stdcall FF_InitHandle(const FFInitSetting *pInitSetting,
-						  OUT FFSettings *pSettings,
+int __stdcall FF_InitHandle(const FF_INIT_SETTING *pInitSetting,
+						  OUT FF_SETTINGS *pSettings,
 						  OUT void **ppHandle);
 
 int __stdcall FF_CloseHandle(void *pHandle);
@@ -41,6 +41,6 @@ int __stdcall FF_Scale(void *pCtx,
 int __stdcall FF_SetResolution(void *p, int width, int height);
 
 int __stdcall FF_CopyAudioStream(void *p, uint8_t *stream, int len);
-int __stdcall FF_SetAudioOutputSetting(void *p, FFAudioSetting *setting);
+int __stdcall FF_SetAudioOutputSetting(void *p, FF_AUDIO_SETTING *setting);
 
 #endif

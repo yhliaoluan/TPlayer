@@ -7,19 +7,19 @@
 class TFFmpegVideoDecoder
 {
 public:
-	TFFmpegVideoDecoder(FFContext *, TFFmpegPacketer *pPkter);
+	TFFmpegVideoDecoder(FF_CONTEXT *, TFFmpegPacketer *pPkter);
 	virtual ~TFFmpegVideoDecoder();
 	int Init();
 	int SetResolution(int width, int height);
-	int SetOutputSetting(FFVideoSetting *setting);
-	int Decode(FFVideoFrame *);
-	int Free(FFVideoFrame *);
+	int SetOutputSetting(FF_VIDEO_SETTING *setting);
+	int Decode(FF_VIDEO_FRAME *);
+	int Free(FF_VIDEO_FRAME *);
 private:
-	FFContext *_ctx;
+	FF_CONTEXT *_ctx;
 	TFFmpegPacketer *_pkter;
 	SwsContext *_swsCtx;
 	TFF_Mutex _settingMutex;
-	FFVideoSetting _outputSetting;
+	FF_VIDEO_SETTING _outputSetting;
 	int _outputSettingChanged;
 
 	AVFrame *_decFrame;

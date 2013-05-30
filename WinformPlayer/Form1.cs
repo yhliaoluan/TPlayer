@@ -21,7 +21,7 @@ namespace WinformPlayer
         }
 
         private IntPtr _handle = IntPtr.Zero;
-        private FFSettings _settings = new FFSettings();
+        private FF_SETTINGS _settings = new FF_SETTINGS();
         private OnNewFrame _onNewFrame = null;
         private OnFinished _onFinished = null;
         private Stopwatch _stopwatch = new Stopwatch();
@@ -36,7 +36,7 @@ namespace WinformPlayer
         {
             if (disposing)
             {
-                if(components != null)
+                if (components != null)
                     components.Dispose();
             }
             if (_handle != IntPtr.Zero)
@@ -65,7 +65,7 @@ namespace WinformPlayer
 
         void OnNewFrame(IntPtr frame)
         {
-            FFFrame f = (FFFrame)Marshal.PtrToStructure(frame, typeof(FFFrame));
+            FF_FRAME f = (FF_FRAME)Marshal.PtrToStructure(frame, typeof(FF_FRAME));
             try
             {
                 int sleepMS = (int)(f.time * 1000 - _stopwatch.ElapsedMilliseconds);
@@ -108,7 +108,7 @@ namespace WinformPlayer
             dlg.Multiselect = false;
             if (dlg.ShowDialog() == System.Windows.Forms.DialogResult.OK)
             {
-                FFInitSetting setting = new FFInitSetting();
+                FF_INIT_SETTING setting = new FF_INIT_SETTING();
                 setting.fileName = dlg.FileName;
                 setting.dstFramePixFmt = 1;
                 if (_handle != IntPtr.Zero)

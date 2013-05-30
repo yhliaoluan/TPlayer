@@ -23,7 +23,7 @@ typedef struct _st_FFPacketList
 {
 	AVPacket *pkt;
 	struct _st_FFPacketList *next;
-} FFPacketList;
+} FF_PACKET_LIST;
 
 typedef struct _st_FFPacketQueue
 {
@@ -32,8 +32,8 @@ typedef struct _st_FFPacketQueue
 	size_t count;
 	size_t size;
 	int type;
-	FFPacketList *first, *last;
-} FFPacketQueue;
+	FF_PACKET_LIST *first, *last;
+} FF_PACKET_QUEUE;
 
 typedef struct _st_FFVideoFrame
 {
@@ -43,15 +43,7 @@ typedef struct _st_FFVideoFrame
 	int height;
 	//size_t size;
 	struct _st_FFVideoFrame *next;
-} FFVideoFrame;
-
-typedef struct _st_FFAudioFrame
-{
-	uint8_t *buffer;
-	int size;
-	int64_t pts;
-	int64_t duration; //in stream base unit
-} FFAudioFrame;
+} FF_VIDEO_FRAME;
 
 typedef struct _st_FFSettings
 {
@@ -76,7 +68,7 @@ typedef struct _st_FFSettings
 		int freq;
 		int64_t channelLayout;
 	} a;
-} FFSettings;
+} FF_SETTINGS;
 
 #define FF_FRAME_PIXFORMAT_RGB24 0
 #define FF_FRAME_PIXFORMAT_YUV420 1
@@ -96,7 +88,7 @@ typedef struct _st_FFInitSetting
 	int useExternalClock;//if set to 0. the video will play as fast as possible
 	int audioDisable;
 	int videoDisable;
-} FFInitSetting;
+} FF_INIT_SETTING;
 
 typedef struct _st_FFFrame
 {
@@ -108,9 +100,9 @@ typedef struct _st_FFFrame
 	long long duration;//in ms
 	int width;
 	int height;
-} FFFrame;
+} FF_FRAME;
 
-typedef void (__stdcall *NewFrameCB)(FFFrame *p);
+typedef void (__stdcall *NewFrameCB)(FF_FRAME *p);
 typedef void (__stdcall *FinishedCB)(void);
 
 typedef struct _st_FFContext
@@ -122,7 +114,7 @@ typedef struct _st_FFContext
 	int asIndex; //audio stream index
 	int ssIndex; //subtitle stream index
 
-} FFContext;
+} FF_CONTEXT;
 
 typedef struct _st_FFAudioSetting
 {
@@ -130,14 +122,14 @@ typedef struct _st_FFAudioSetting
 	int channels;
 	int freq;
 	enum AVSampleFormat sampleFmt;
-} FFAudioSetting;
+} FF_AUDIO_SETTING;
 
 typedef struct _st_FFVideoSetting
 {
 	enum AVPixelFormat pixFmt;
 	int width;
 	int height;
-} FFVideoSetting;
+} FF_VIDEO_SETTING;
 
 #define FF_OK								0
 #define FF_EOF								2
