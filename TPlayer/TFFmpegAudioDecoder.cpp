@@ -197,7 +197,7 @@ int TFFmpegAudioDecoder::CopyData(AVFrame *frame, AVPacket *pkt)
 		in = (const uint8_t **)frame->extended_data;
 		s = frame->nb_samples + 256;
 		minSize  = av_samples_get_buffer_size(NULL,
-			av_frame_get_channels(frame),
+            _outputSetting.channels,
 			s,
 			(AVSampleFormat)_outputSetting.sampleFmt,
 			0);
@@ -205,7 +205,7 @@ int TFFmpegAudioDecoder::CopyData(AVFrame *frame, AVPacket *pkt)
 		out = &_outBuffer;
 		samples = swr_convert(_swr, out, s, in, frame->nb_samples);
 		from = _outBuffer;
-		dataSize = samples * av_frame_get_channels(frame) * av_get_bytes_per_sample(_outputSetting.sampleFmt);
+		dataSize = samples * _outputSetting.channels * av_get_bytes_per_sample(_outputSetting.sampleFmt);
 	}
 	else
 	{

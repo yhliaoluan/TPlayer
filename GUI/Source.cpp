@@ -287,7 +287,7 @@ static int InitTFFPlayer(wchar_t *file, FF_SETTINGS *setting, void **handle)
 		initSetting.framePixFmt = FF_FRAME_PIXFORMAT_RGB24;
 		initSetting.sampleFmt = FF_AUDIO_SAMPLE_FMT_S16;
 		initSetting.audioDisable = 0;
-		initSetting.videoDisable = 0;
+		initSetting.videoDisable = 1;
 		initSetting.useExternalClock = 1;
 		err = FF_InitHandle(&initSetting, setting, handle);
 	}
